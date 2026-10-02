@@ -1,0 +1,95 @@
+[project]
+name = "zakup"
+version = "0.1.0"
+description = "Xarid va ombor tizimi (iiko integratsiyasi) — backend"
+requires-python = ">=3.12"
+dependencies = [
+    "fastapi>=0.142",
+    "uvicorn[standard]>=0.54",
+    "sqlalchemy[asyncio]>=2.1",
+    "asyncpg>=0.31",
+    "alembic>=1.20",
+    "pydantic>=2.13",
+    "pydantic-settings>=2.15",
+    "structlog>=26.1",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=9.1",
+    "pytest-asyncio>=1.0",
+    "httpx>=0.28",
+    "ruff>=0.16",
+    "mypy>=2.4",
+    "import-linter>=2.15",
+]
+
+[build-system]
+requires = ["setuptools>=75"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+# ---------------------------------------------------------------- ruff
+[tool.ruff]
+line-length = 120
+target-version = "py312"
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "N", "UP", "B", "A", "C4", "SIM", "RET", "PT", "ASYNC", "S", "RUF", "PL", "TID"]
+ignore = ["PLR0913", "S101"]
+
+[tool.ruff.lint.isort]
+# backend/alembic papkasi bor — ruff uni first-party deb o'ylamasin
+known-third-party = ["alembic"]
+known-first-party = ["zakup", "tests"]
+
+[tool.ruff.lint.per-file-ignores]
+# Ikki tilli matnlar: kirill harflari ataylab ishlatilgan
+"src/zakup/platform/i18n.py" = ["RUF001"]
+"tests/**" = ["PLR2004", "S105", "S106", "RUF001"]
+"alembic/**" = ["N999"]
+
+# ---------------------------------------------------------------- mypy
+[tool.mypy]
+python_version = "3.12"
+strict = true
+mypy_path = "src"
+packages = ["zakup"]
+plugins = ["pydantic.mypy"]
+
+# ---------------------------------------------------------------- pytest
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "session"
+asyncio_default_test_loop_scope = "session"
+markers = ["integration: haqiqiy PostgreSQL kerak"]
+
+# ---------------------------------------------------------------- import-linter
+# Arxitektura chegaralari (docs/ARCHITECTURE.md §3.1, §4) — buzilsa CI yiqiladi.
+[tool.importlinter]
+root_package = "zakup"
+include_external_packages = true
+
+[[tool.importlinter.contracts]]
+name = "Domain va shared_kernel hech qanday framework'ni bilmaydi"
+type = "forbidden"
+source_modules = ["zakup.shared_kernel", "zakup.modules.*.domain"]
+forbidden_modules = ["fastapi", "sqlalchemy", "pydantic", "asyncpg", "zakup.platform"]
+
+[[tool.importlinter.contracts]]
+name = "Modul ichidagi qatlamlar: (api | infrastructure) -> application -> domain"
+type = "layers"
+containers = ["zakup.modules.catalog"]
+# api va infrastructure bir-birini bilmaydi: ular bootstrap.py (composition root) da ulanadi
+layers = ["api | infrastructure", "application", "domain"]
+
+[[tool.importlinter.contracts]]
+name = "Application qatlami infrastructure'ni import qilmaydi (DIP)"
+type = "forbidden"
+source_modules = ["zakup.modules.*.application"]
+forbidden_modules = ["zakup.modules.*.infrastructure", "zakup.modules.*.api", "fastapi", "sqlalchemy"]

@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="uz" data-theme="dark">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, user-scalable=no" />
+    <meta name="color-scheme" content="dark light" />
+    <title>Zakup</title>
+    <!-- Telegram Mini App SDK: Telegram ichida initData va mavzuni beradi; brauzerda zararsiz -->
+    <script src="https://telegram.org/js/telegram-web-app.js?59"></script>
+    <script>
+      // Birinchi kadrda to'g'ri mavzu — "oq chaqnash" bo'lmasin (shared/lib/theme.ts bilan bir xil mantiq)
+      (function () {
+        var pref = 'system'
+        try {
+          // ?theme=dark|light|system — skrinshot / test uchun, tanlov saqlanadi
+          var forced = new URLSearchParams(location.search).get('theme')
+          if (forced === 'dark' || forced === 'light' || forced === 'system') localStorage.setItem('zakup.theme', forced)
+          pref = localStorage.getItem('zakup.theme') || 'system'
+          // ?lang=uz|ru — xuddi shunday (shared/i18n, kalit 'zakup.locale')
+          var lang = new URLSearchParams(location.search).get('lang')
+          if (lang === 'uz' || lang === 'ru') localStorage.setItem('zakup.locale', lang)
+        } catch (e) {}
+        var tg = window.Telegram && window.Telegram.WebApp
+        var system = tg && tg.initData ? tg.colorScheme
+          : (matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark')
+        document.documentElement.dataset.theme = pref === 'system' ? system : pref
+      })()
+    </script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/app/main.tsx"></script>
+  </body>
+</html>
