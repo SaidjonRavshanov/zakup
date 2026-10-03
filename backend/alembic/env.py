@@ -6,6 +6,7 @@ from sqlalchemy.engine import Connection
 from sqlalchemy.ext.asyncio import create_async_engine
 
 from zakup.modules.catalog.infrastructure import tables as _catalog  # noqa: F401
+from zakup.modules.identity.infrastructure import tables as _identity  # noqa: F401
 from zakup.platform import outbox as _outbox  # noqa: F401 — jadvallarni metadata'ga ro'yxatdan o'tkazish
 from zakup.platform.db import SCHEMAS, metadata
 from zakup.settings import get_settings

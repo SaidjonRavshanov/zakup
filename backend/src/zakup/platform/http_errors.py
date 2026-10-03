@@ -9,13 +9,20 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 
 from zakup.platform.i18n import negotiate_locale, translate
-from zakup.shared_kernel.errors import ConflictError, DomainError, NotFoundError, PermissionDeniedError
+from zakup.shared_kernel.errors import (
+    ConflictError,
+    DomainError,
+    NotFoundError,
+    PermissionDeniedError,
+    UnauthenticatedError,
+)
 
 log = structlog.get_logger()
 
 _STATUS: list[tuple[type[DomainError], int]] = [
     (NotFoundError, 404),
     (ConflictError, 409),
+    (UnauthenticatedError, 401),
     (PermissionDeniedError, 403),
     (DomainError, 422),
 ]

@@ -12,6 +12,7 @@ dependencies = [
     "pydantic>=2.13",
     "pydantic-settings>=2.15",
     "structlog>=26.1",
+    "pyjwt>=2.10",
 ]
 
 [project.optional-dependencies]
@@ -84,7 +85,7 @@ forbidden_modules = ["fastapi", "sqlalchemy", "pydantic", "asyncpg", "zakup.plat
 [[tool.importlinter.contracts]]
 name = "Modul ichidagi qatlamlar: (api | infrastructure) -> application -> domain"
 type = "layers"
-containers = ["zakup.modules.catalog"]
+containers = ["zakup.modules.catalog", "zakup.modules.identity"]
 # api va infrastructure bir-birini bilmaydi: ular bootstrap.py (composition root) da ulanadi
 layers = ["api | infrastructure", "application", "domain"]
 

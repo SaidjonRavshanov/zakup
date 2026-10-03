@@ -3,37 +3,153 @@
 Yangi modul qo'shish: router'ni `ROUTERS` ga, provider'larni `_wire_*` ga qo'shing.
 """
 
-from collections.abc import AsyncIterator
-from typing import Annotated
+from collections.abc import AsyncIterator, Callable
+from typing import Annotated, Any, Protocol, TypeVar
 
 from fastapi import APIRouter, Depends, FastAPI
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
 
 from zakup.modules.catalog.api.router import router as catalog_router
 from zakup.modules.catalog.application.use_cases import ListSuppliers, RegisterSupplier
 from zakup.modules.catalog.infrastructure.repositories import SqlSupplierReader, SqlSupplierRepository
+from zakup.modules.identity.api.router import auth_router, dev_auth_router, me_router, users_router
+from zakup.modules.identity.application.use_cases import (
+    ActivateUser,
+    ChangeMyLocale,
+    DeactivateUser,
+    GetMyProfile,
+    ListUsers,
+    RefreshSession,
+    SetUserRoles,
+    SignIn,
+    SignInWithTelegram,
+    SignOut,
+)
+from zakup.modules.identity.infrastructure.auth_adapters import (
+    JwtAccessTokenIssuer,
+    SqlRefreshTokenStore,
+    TelegramInitDataVerifier,
+)
+from zakup.modules.identity.infrastructure.repositories import SqlUserReader, SqlUserRepository
+from zakup.platform.access_tokens import AccessTokenCodec, InvalidAccessTokenError
 from zakup.platform.di import Stub
 from zakup.platform.health import router as health_router
 from zakup.platform.uow import SqlAlchemyUnitOfWork
+from zakup.settings import Settings
+from zakup.shared_kernel.auth import Principal
 
-ROUTERS: tuple[APIRouter, ...] = (health_router, catalog_router)
+ROUTERS: tuple[APIRouter, ...] = (health_router, auth_router, me_router, users_router, catalog_router)
+
+T = TypeVar("T")
+Overrides = dict[Callable[..., Any], Callable[..., Any]]
 
 
-def wire(app: FastAPI, engine: AsyncEngine, session_factory: async_sessionmaker[AsyncSession]) -> None:
+class PerRequest(Protocol):
+    def __call__(self, build: Callable[[AsyncSession], T]) -> Callable[[AsyncSession], T]: ...
+
+
+_bearer = HTTPBearer(auto_error=False, description="POST /auth/telegram javobidagi access_token")
+
+
+def wire(
+    app: FastAPI,
+    engine: AsyncEngine,
+    session_factory: async_sessionmaker[AsyncSession],
+    settings: Settings,
+) -> None:
     async def provide_session() -> AsyncIterator[AsyncSession]:
         async with session_factory() as session:
             yield session
 
-    Session = Annotated[AsyncSession, Depends(provide_session)]  # noqa: N806
+    def per_request(build: Callable[[AsyncSession], T]) -> Callable[[AsyncSession], T]:
+        """Provider: so'rov sessiyasini oladi. Bitta so'rov ichida UoW va repository'lar
+        bitta sessiyani ulashadi (FastAPI dependency keshi)."""
 
-    # Bitta so'rov ichida UoW va repository bitta sessiyani ulashadi (FastAPI dependency keshi)
-    def provide_list_suppliers(session: Session) -> ListSuppliers:
-        return ListSuppliers(SqlSupplierReader(session))
+        def provider(session: Annotated[AsyncSession, Depends(provide_session)]) -> T:
+            return build(session)
 
-    def provide_register_supplier(session: Session) -> RegisterSupplier:
-        return RegisterSupplier(SqlAlchemyUnitOfWork(session), SqlSupplierRepository(session))
+        return provider
 
     overrides = app.dependency_overrides
     overrides[Stub(AsyncEngine)] = lambda: engine
-    overrides[Stub(ListSuppliers)] = provide_list_suppliers
-    overrides[Stub(RegisterSupplier)] = provide_register_supplier
+    _wire_identity(app, overrides, per_request, settings)
+    _wire_catalog(overrides, per_request)
+
+
+def _wire_identity(
+    app: FastAPI,
+    overrides: Overrides,
+    per_request: PerRequest,
+    settings: Settings,
+) -> None:
+    codec = AccessTokenCodec(settings.jwt_secret.get_secret_value(), settings.access_token_ttl_s)
+    access = JwtAccessTokenIssuer(codec)
+    verifier = TelegramInitDataVerifier(
+        settings.telegram_bot_token.get_secret_value(), settings.telegram_init_data_ttl_s
+    )
+    bootstrap_admin_ids = frozenset(settings.bootstrap_admin_ids)
+
+    def provide_principal(
+        credentials: Annotated[HTTPAuthorizationCredentials | None, Depends(_bearer)],
+    ) -> Principal:
+        if credentials is None:
+            raise InvalidAccessTokenError("auth.token_missing")
+        return codec.decode(credentials.credentials)
+
+    def refresh_store(session: AsyncSession) -> SqlRefreshTokenStore:
+        return SqlRefreshTokenStore(session, settings.refresh_token_ttl_s)
+
+    provide_sign_in = per_request(
+        lambda session: SignIn(
+            SqlAlchemyUnitOfWork(session),
+            SqlUserRepository(session),
+            access=access,
+            refresh=refresh_store(session),
+            bootstrap_admin_ids=bootstrap_admin_ids,
+        )
+    )
+
+    def provide_sign_in_with_telegram(sign_in: Annotated[SignIn, Depends(provide_sign_in)]) -> SignInWithTelegram:
+        return SignInWithTelegram(verifier, sign_in)
+
+    overrides[Stub(Principal)] = provide_principal
+    overrides[Stub(SignIn)] = provide_sign_in
+    overrides[Stub(SignInWithTelegram)] = provide_sign_in_with_telegram
+    overrides[Stub(RefreshSession)] = per_request(
+        lambda session: RefreshSession(
+            SqlAlchemyUnitOfWork(session), SqlUserRepository(session), access, refresh_store(session)
+        )
+    )
+    overrides[Stub(SignOut)] = per_request(
+        lambda session: SignOut(SqlAlchemyUnitOfWork(session), refresh_store(session))
+    )
+    overrides[Stub(GetMyProfile)] = per_request(lambda session: GetMyProfile(SqlUserReader(session)))
+    overrides[Stub(ChangeMyLocale)] = per_request(
+        lambda session: ChangeMyLocale(SqlAlchemyUnitOfWork(session), SqlUserRepository(session))
+    )
+    overrides[Stub(ListUsers)] = per_request(lambda session: ListUsers(SqlUserReader(session)))
+    overrides[Stub(ActivateUser)] = per_request(
+        lambda session: ActivateUser(SqlAlchemyUnitOfWork(session), SqlUserRepository(session))
+    )
+    overrides[Stub(DeactivateUser)] = per_request(
+        lambda session: DeactivateUser(
+            SqlAlchemyUnitOfWork(session), SqlUserRepository(session), refresh_store(session)
+        )
+    )
+    overrides[Stub(SetUserRoles)] = per_request(
+        lambda session: SetUserRoles(SqlAlchemyUnitOfWork(session), SqlUserRepository(session))
+    )
+
+    if settings.dev_auth_bypass:
+        app.include_router(dev_auth_router, prefix="/api/v1")
+
+
+def _wire_catalog(
+    overrides: Overrides,
+    per_request: PerRequest,
+) -> None:
+    overrides[Stub(ListSuppliers)] = per_request(lambda session: ListSuppliers(SqlSupplierReader(session)))
+    overrides[Stub(RegisterSupplier)] = per_request(
+        lambda session: RegisterSupplier(SqlAlchemyUnitOfWork(session), SqlSupplierRepository(session))
+    )

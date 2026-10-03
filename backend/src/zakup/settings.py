@@ -4,6 +4,8 @@ from typing import Literal
 from pydantic import Field, PostgresDsn, SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+_DEV_JWT_SECRET = "local-dev-only-jwt-secret-change-me-0123456789"  # noqa: S105 — faqat local/test
+
 
 class Settings(BaseSettings):
     """Barcha konfiguratsiya — muhit o'zgaruvchilari / .env orqali (12-factor)."""
@@ -24,6 +26,13 @@ class Settings(BaseSettings):
     telegram_init_data_ttl_s: int = 3_600
     # Faqat local: Telegram'siz brauzerda ishlash uchun — production'da taqiqlangan
     dev_auth_bypass: bool = False
+    # Birinchi kirishda avtomatik admin bo'ladigan Telegram ID'lar (JSON: [123456789])
+    bootstrap_admin_ids: list[int] = []
+
+    # Access JWT imzosi; production'da majburiy, kamida 32 belgi
+    jwt_secret: SecretStr = SecretStr(_DEV_JWT_SECRET)
+    access_token_ttl_s: int = 15 * 60
+    refresh_token_ttl_s: int = 7 * 24 * 3600
 
     cors_origins: list[str] = ["http://localhost:5173", "http://127.0.0.1:5173"]
 
@@ -33,4 +42,6 @@ def get_settings() -> Settings:
     settings = Settings()
     if settings.env == "production" and settings.dev_auth_bypass:
         raise RuntimeError("ZAKUP_DEV_AUTH_BYPASS production'da yoqilishi mumkin emas")
+    if settings.env == "production" and settings.jwt_secret.get_secret_value() == _DEV_JWT_SECRET:
+        raise RuntimeError("ZAKUP_JWT_SECRET production'da o'rnatilishi shart")
     return settings

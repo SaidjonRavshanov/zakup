@@ -65,6 +65,47 @@ MESSAGES: Final[dict[str, dict[Locale, str]]] = {
         "ru": "Сессия устарела. Откройте приложение заново",
     },
     "auth.init_data_bad_user": {"uz": "Telegram foydalanuvchisi noto'g'ri", "ru": "Некорректный пользователь Telegram"},
+    "unauthenticated": {"uz": "Tizimga kiring", "ru": "Требуется вход"},
+    "invalid_token": {"uz": "Sessiya yaroqsiz. Qayta kiring", "ru": "Сессия недействительна. Войдите заново"},
+    "auth.token_missing": {"uz": "Tizimga kiring", "ru": "Требуется вход"},
+    "auth.token_expired": {"uz": "Sessiya muddati tugadi", "ru": "Срок сессии истёк"},
+    "auth.token_invalid": {"uz": "Sessiya yaroqsiz. Qayta kiring", "ru": "Сессия недействительна. Войдите заново"},
+    "invalid_refresh_token": {"uz": "Sessiya yaroqsiz. Qayta kiring", "ru": "Сессия недействительна. Войдите заново"},
+    "auth.refresh_invalid": {"uz": "Sessiya yaroqsiz. Qayta kiring", "ru": "Сессия недействительна. Войдите заново"},
+    "auth.refresh_expired": {
+        "uz": "Sessiya muddati tugadi. Ilovani qayta oching",
+        "ru": "Срок сессии истёк. Откройте приложение заново",
+    },
+    "auth.role_required": {
+        "uz": "Bu amal uchun sizning rolingizda ruxsat yo'q",
+        "ru": "У вашей роли нет прав на это действие",
+    },
+    "account_pending": {
+        "uz": "Akkaunt hali faollashtirilmagan",
+        "ru": "Аккаунт ещё не активирован",
+    },
+    "auth.account_pending": {
+        "uz": "Akkauntingiz administrator tasdig'ini kutmoqda",
+        "ru": "Ваш аккаунт ожидает подтверждения администратором",
+    },
+    # --- identity
+    "invalid_user": {"uz": "Foydalanuvchi ma'lumotlari noto'g'ri", "ru": "Некорректные данные пользователя"},
+    "user.telegram_id": {"uz": "Telegram ID noto'g'ri", "ru": "Некорректный Telegram ID"},
+    "user.too_many_grants": {
+        "uz": "Rollar soni {max} tadan oshmasligi kerak",
+        "ru": "Ролей не может быть больше {max}",
+    },
+    "user.not_found": {"uz": "Foydalanuvchi topilmadi", "ru": "Пользователь не найден"},
+    "user.modified": {
+        "uz": "Foydalanuvchi boshqa administrator tomonidan o'zgartirilgan",
+        "ru": "Пользователь изменён другим администратором",
+    },
+    "self_lockout": {"uz": "O'zingizni bloklab bo'lmaydi", "ru": "Нельзя заблокировать самого себя"},
+    "user.self_deactivate": {"uz": "O'zingizni o'chira olmaysiz", "ru": "Нельзя деактивировать самого себя"},
+    "user.self_remove_admin": {
+        "uz": "O'zingizdan administrator rolini olib bo'lmaydi",
+        "ru": "Нельзя снять роль администратора с самого себя",
+    },
 }
 
 

@@ -42,7 +42,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     register_error_handlers(app)
     for router in ROUTERS:
         app.include_router(router, prefix="/api/v1")
-    wire(app, engine, create_session_factory(engine))
+    wire(app, engine, create_session_factory(engine), settings)
     return app
 
 

@@ -26,6 +26,12 @@ class ConflictError(DomainError):
     code = "conflict"
 
 
+class UnauthenticatedError(DomainError):
+    """Token yo'q, muddati o'tgan yoki yaroqsiz (401): klient sessiyani yangilashi kerak."""
+
+    code = "unauthenticated"
+
+
 class PermissionDeniedError(DomainError):
     code = "permission_denied"
 

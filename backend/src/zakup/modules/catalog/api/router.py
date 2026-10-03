@@ -8,12 +8,14 @@ from zakup.modules.catalog.api.schemas import CreatedOut, RegisterSupplierIn, Su
 from zakup.modules.catalog.application.dto import RegisterSupplierCommand
 from zakup.modules.catalog.application.use_cases import ListSuppliers, RegisterSupplier
 from zakup.platform.di import Stub
+from zakup.platform.security import CurrentPrincipal
 
 router = APIRouter(prefix="/catalog", tags=["catalog"])
 
 
 @router.get("/suppliers")
 async def list_suppliers(
+    _: CurrentPrincipal,
     use_case: Annotated[ListSuppliers, Depends(Stub(ListSuppliers))],
     search: Annotated[str | None, Query(max_length=100)] = None,
     include_archived: bool = False,
@@ -26,7 +28,8 @@ async def list_suppliers(
 @router.post("/suppliers", status_code=status.HTTP_201_CREATED)
 async def register_supplier(
     body: RegisterSupplierIn,
+    actor: CurrentPrincipal,
     use_case: Annotated[RegisterSupplier, Depends(Stub(RegisterSupplier))],
 ) -> CreatedOut:
-    supplier_id = await use_case(RegisterSupplierCommand(**body.model_dump()))
+    supplier_id = await use_case(RegisterSupplierCommand(**body.model_dump()), actor)
     return CreatedOut(id=supplier_id)

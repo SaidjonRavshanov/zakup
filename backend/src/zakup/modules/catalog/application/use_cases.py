@@ -5,6 +5,7 @@ from uuid import UUID
 from zakup.modules.catalog.application.dto import RegisterSupplierCommand, SupplierListItem
 from zakup.modules.catalog.application.ports import SupplierReader, SupplierRepository
 from zakup.modules.catalog.domain.supplier import DuplicateInnError, Supplier
+from zakup.shared_kernel.auth import Principal, Role
 from zakup.shared_kernel.money import Money
 from zakup.shared_kernel.uow import UnitOfWork
 
@@ -16,7 +17,8 @@ class RegisterSupplier:
         self._uow = uow
         self._suppliers = suppliers
 
-    async def __call__(self, cmd: RegisterSupplierCommand) -> UUID:
+    async def __call__(self, cmd: RegisterSupplierCommand, actor: Principal) -> UUID:
+        actor.require(Role.BUYER, Role.ADMIN)
         async with self._uow:
             if cmd.inn and await self._suppliers.exists_by_inn(cmd.inn.strip()):
                 raise DuplicateInnError("supplier.duplicate_inn", inn=cmd.inn)
