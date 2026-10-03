@@ -37,6 +37,18 @@ const profileRoute = createRoute({
   component: lazyRouteComponent(() => import('@/pages/profile/ProfilePage')),
 })
 
+const usersRoute = createRoute({
+  getParentRoute: () => shellRoute,
+  path: '/admin/users',
+  component: lazyRouteComponent(() => import('@/pages/admin-users/UsersPage')),
+})
+
+const userEditRoute = createRoute({
+  getParentRoute: () => shellRoute,
+  path: '/admin/users/$userId',
+  component: lazyRouteComponent(() => import('@/pages/admin-users/UserEditPage')),
+})
+
 // Prod build'da shart statik false bo'ladi → vitrin chunk'i bundle'ga kirmaydi
 const devUiRoute = createRoute({
   getParentRoute: () => shellRoute,
@@ -45,7 +57,7 @@ const devUiRoute = createRoute({
 })
 
 const routeTree = rootRoute.addChildren([
-  shellRoute.addChildren([dashboardRoute, ordersRoute, receivingRoute, receiveOrderRoute, profileRoute, devUiRoute]),
+  shellRoute.addChildren([dashboardRoute, ordersRoute, receivingRoute, receiveOrderRoute, profileRoute, usersRoute, userEditRoute, devUiRoute]),
 ])
 
 export const router = createRouter({

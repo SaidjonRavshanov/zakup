@@ -7,6 +7,7 @@ import { initI18n } from '@/shared/i18n'
 import { telegram } from '@/shared/lib/telegram'
 import { detectPerformanceMode } from '@/shared/lib/theme'
 import { initTheme } from '@/shared/lib/use-theme'
+import { AuthGate } from './AuthGate'
 import { router } from './router'
 import './styles/index.css'
 
@@ -21,7 +22,9 @@ if (!root) throw new Error('#root topilmadi')
 createRoot(root).render(
   <StrictMode>
     <QueryClientProvider client={queryClient}>
-      <RouterProvider router={router} />
+      <AuthGate>
+        <RouterProvider router={router} />
+      </AuthGate>
     </QueryClientProvider>
   </StrictMode>,
 )

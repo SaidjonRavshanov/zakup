@@ -1,17 +1,41 @@
+import { useQuery } from '@tanstack/react-query'
 import { Outlet } from '@tanstack/react-router'
-import { ClipboardList, LayoutGrid, PackageCheck, UserRound } from 'lucide-react'
-import { useI18n } from '@/shared/i18n'
+import { ClipboardList, LayoutGrid, PackageCheck, UserRound, UsersRound } from 'lucide-react'
+import { meQuery, useActiveRole, type Role } from '@/entities/user'
+import { useI18n, type Messages } from '@/shared/i18n'
 import { BottomNav, type NavItem } from '@/shared/ui'
+
+type NavKey = 'home' | 'orders' | 'receiving' | 'users' | 'profile'
+
+const ITEMS: Record<NavKey, Omit<NavItem, 'label'>> = {
+  home: { to: '/', icon: LayoutGrid },
+  orders: { to: '/orders', icon: ClipboardList },
+  receiving: { to: '/receiving', icon: PackageCheck },
+  users: { to: '/admin/users', icon: UsersRound },
+  profile: { to: '/profile', icon: UserRound },
+}
+
+/**
+ * BottomNav faol rolga qarab (DESIGN_SYSTEM.md §7). Hozircha faqat mavjud sahifalar;
+ * zayavkalar, to'lovlar, nazorat ekranlari tegishli bosqichlarda qo'shiladi.
+ */
+const NAV_BY_ROLE: Record<Role, ReadonlyArray<NavKey>> = {
+  initiator: ['home', 'orders', 'profile'],
+  buyer: ['home', 'orders', 'receiving', 'profile'],
+  approver: ['home', 'orders', 'profile'],
+  storekeeper: ['home', 'receiving', 'profile'],
+  accountant: ['home', 'orders', 'profile'],
+  auditor: ['home', 'orders', 'receiving', 'profile'],
+  admin: ['home', 'users', 'profile'],
+}
+
+const buildNav = (role: Role | null, t: Messages): NavItem[] =>
+  (role ? NAV_BY_ROLE[role] : (['home', 'profile'] as const)).map((key) => ({ ...ITEMS[key], label: t.nav[key] }))
 
 export function AppShell() {
   const { t } = useI18n()
-  // TODO(identity): rolga qarab element ro'yxati (DESIGN_SYSTEM.md §7)
-  const nav: ReadonlyArray<NavItem> = [
-    { to: '/', label: t.nav.home, icon: LayoutGrid },
-    { to: '/orders', label: t.nav.orders, icon: ClipboardList, badge: 2 },
-    { to: '/receiving', label: t.nav.receiving, icon: PackageCheck },
-    { to: '/profile', label: t.nav.profile, icon: UserRound },
-  ]
+  const { data: me } = useQuery(meQuery)
+  const role = useActiveRole(me)
 
   return (
     <div className="relative mx-auto min-h-dvh max-w-xl">
@@ -23,7 +47,7 @@ export function AppShell() {
       <main className="px-4 pb-32 pt-[max(8px,env(safe-area-inset-top))]">
         <Outlet />
       </main>
-      <BottomNav items={nav} />
+      <BottomNav items={buildNav(role, t)} />
     </div>
   )
 }

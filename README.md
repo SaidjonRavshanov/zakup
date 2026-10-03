@@ -39,6 +39,8 @@ npm run dev            # /api → 127.0.0.1:8010 ga proxy qilinadi
 - Tarmoqqa ochish (telefondan test): `npm run dev:lan` → `http://<kompyuter-IP>:5173`. Backend `127.0.0.1` da qoladi — `/api` Vite proxy orqali boradi. Windows Firewall'da bir marta (Administrator PowerShell):
   `New-NetFirewallRule -DisplayName "Zakup dev (Vite 5173)" -Direction Inbound -Protocol TCP -LocalPort 5173 -Action Allow -Profile Private`
 - Mavzuni majburlash: `?theme=dark` / `?theme=light` / `?theme=system`.
+- Kirish: Telegram ichida — avtomatik (`initData`). Brauzerda (faqat dev, `ZAKUP_DEV_AUTH_BYPASS=true`) — Telegram ID qo'lda kiritiladi.
+  Birinchi admin: `backend/.env` da `ZAKUP_BOOTSTRAP_ADMIN_IDS=[<telegram_id>]`. Qolgan xodimlar botni ochadi → admin **Xodimlar** sahifasida faollashtiradi va rol beradi.
 - Til: `?lang=uz` / `?lang=ru` (yoki Profil sahifasida). Default: saqlangan tanlov → Telegram tili → brauzer tili → uz. Matnlar: `frontend/src/shared/i18n/locales/` — yangi kalit avval `uz.ts` ga, keyin `ru.ts` ga (aks holda TypeScript xato beradi).
 - Backend matnlari (xato xabarlari): `backend/src/zakup/platform/i18n.py` — domen faqat kalit beradi (`raise InvalidSupplierError("supplier.inn_format")`), til `Accept-Language` bo'yicha tanlanadi. Katalogda yo'q kalitni `tests/unit/test_i18n.py` ushlaydi.
 - Dizayn tizimi vitrini (faqat dev): http://127.0.0.1:5173/dev/ui

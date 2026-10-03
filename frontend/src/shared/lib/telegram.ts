@@ -18,7 +18,7 @@ interface TgButton {
 interface TgWebApp {
   initData: string
   /** Imzosiz nusxa — faqat UI uchun (til), ishonch/ruxsat uchun emas: backend initData'ni tekshiradi. */
-  initDataUnsafe: { user?: { language_code?: string } }
+  initDataUnsafe: { user?: { id?: number; language_code?: string } }
   colorScheme: ColorScheme
   platform: string
   version: string
@@ -52,6 +52,9 @@ export const isInTelegram = Boolean(webApp?.initData)
 
 export const telegram = {
   initData: (): string => webApp?.initData ?? '',
+
+  /** Faqat ko'rsatish uchun ("admin'ga ID yuboring"); ishonch uchun emas. */
+  userId: (): number | null => (isInTelegram ? (webApp?.initDataUnsafe.user?.id ?? null) : null),
 
   languageCode: (): string | null => (isInTelegram ? (webApp?.initDataUnsafe.user?.language_code ?? null) : null),
 

@@ -4,7 +4,13 @@ import { telegram } from '@/shared/lib/telegram'
 
 const OPTIONS = Object.keys(LOCALES) as Locale[]
 
-export function LanguageSwitch({ className }: { className?: string }) {
+interface LanguageSwitchProps {
+  className?: string
+  /** Til tanlangandan keyin (masalan, profilga saqlash). */
+  onChange?: (locale: Locale) => void
+}
+
+export function LanguageSwitch({ className, onChange }: LanguageSwitchProps) {
   const { locale, t } = useI18n()
   return (
     <div
@@ -23,6 +29,7 @@ export function LanguageSwitch({ className }: { className?: string }) {
             onClick={() => {
               telegram.haptic.select()
               setLocale(value)
+              if (!active) onChange?.(value)
             }}
             className={cn(
               'flex h-10 items-center justify-center gap-2 rounded-full font-mono text-[10px] font-medium uppercase tracking-[0.18em] transition-colors duration-200',
