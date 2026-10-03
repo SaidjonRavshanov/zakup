@@ -1,7 +1,5 @@
 """Identity use case'lari: kirish (Telegram), sessiya, profil, admin — foydalanuvchilarni boshqarish."""
 
-from collections.abc import Callable
-from datetime import UTC, datetime
 from uuid import UUID
 
 from zakup.modules.identity.application.dto import SessionTokens, TelegramIdentity, UserProfile, UserStatus
@@ -14,15 +12,11 @@ from zakup.modules.identity.application.ports import (
 )
 from zakup.modules.identity.domain.user import AccountPendingError, Locale, User, normalize_locale
 from zakup.shared_kernel.auth import Principal, Role, RoleGrant
+from zakup.shared_kernel.clock import Clock, utc_now
 from zakup.shared_kernel.errors import NotFoundError
 from zakup.shared_kernel.uow import UnitOfWork
 
-Clock = Callable[[], datetime]
 MAX_PAGE_SIZE = 200
-
-
-def utc_now() -> datetime:
-    return datetime.now(UTC)
 
 
 class _SessionIssuer:

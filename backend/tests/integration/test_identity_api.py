@@ -66,7 +66,8 @@ async def test_telegram_sign_in_checks_signature(client: AsyncClient, admin_head
 
 
 async def test_admin_onboards_user_and_me_shows_roles(client: AsyncClient, admin_headers: dict[str, str]) -> None:
-    store_id = "0192a000-0000-7000-8000-000000000001"
+    store = await client.post("/api/v1/catalog/stores", json={"name": "Oshxona"}, headers=admin_headers)
+    store_id = store.json()["id"]
     session = await _onboard(
         client, admin_headers, 4004, [{"role": "buyer"}, {"role": "storekeeper", "store_id": store_id}]
     )
@@ -131,3 +132,11 @@ async def test_logout_revokes_refresh_token(client: AsyncClient, admin_headers: 
     ).status_code == 204
     response = await client.post("/api/v1/auth/refresh", json={"refresh_token": session["refresh_token"]})
     assert response.status_code == 401
+
+
+async def test_role_for_unknown_store_is_rejected(client: AsyncClient, admin_headers: dict[str, str]) -> None:
+    await sign_in(client, 8008)
+    user_id = await _pending_user_id(client, admin_headers, 8008)
+    grants = [{"role": "storekeeper", "store_id": "0192a000-0000-7000-8000-000000000001"}]
+    response = await client.put(f"{USERS}/{user_id}/roles", json={"grants": grants}, headers=admin_headers)
+    assert (response.status_code, response.json()["code"]) == (422, "invalid_user")

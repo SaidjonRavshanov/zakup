@@ -13,11 +13,21 @@ from zakup.shared_kernel.errors import DomainError
 SRC = Path(zakup.__file__).parent
 
 
+def _is_key(node: ast.expr) -> bool:
+    return isinstance(node, ast.Constant) and isinstance(node.value, str) and "." in node.value
+
+
 def _keys_used_in_source() -> set[str]:
-    """`raise SomeError("kalit", ...)` dagi birinchi satr argumentlari."""
+    """`raise SomeError("kalit", ...)`, `load(repo, id, "kalit")` va `conflict_key = "kalit"`."""
     keys: set[str] = set()
     for path in SRC.rglob("*.py"):
         for node in ast.walk(ast.parse(path.read_text(encoding="utf-8"))):
+            if isinstance(node, ast.Call) and isinstance(node.func, ast.Name) and node.func.id == "load":
+                keys.update(arg.value for arg in node.args[2:3] if _is_key(arg))  # type: ignore[attr-defined]
+            if isinstance(node, ast.Assign) and any(
+                isinstance(t, ast.Name) and t.id == "conflict_key" for t in node.targets
+            ):
+                keys.update([node.value.value] if _is_key(node.value) else [])  # type: ignore[attr-defined]
             if (
                 isinstance(node, ast.Raise)
                 and isinstance(node.exc, ast.Call)

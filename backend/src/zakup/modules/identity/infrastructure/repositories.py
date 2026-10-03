@@ -4,10 +4,11 @@ from uuid import UUID
 
 from sqlalchemy import Select, delete, func, insert, select, update
 from sqlalchemy.engine import RowMapping
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from zakup.modules.identity.application.dto import UserProfile, UserStatus
-from zakup.modules.identity.domain.user import User
+from zakup.modules.identity.domain.user import InvalidUserError, User
 from zakup.modules.identity.infrastructure.tables import user_roles, users
 from zakup.shared_kernel.auth import Role, RoleGrant
 from zakup.shared_kernel.errors import ConflictError
@@ -76,11 +77,16 @@ class SqlUserRepository:
         return _to_domain(row, grants)
 
     async def _write_grants(self, user: User) -> None:
-        if user.grants:
-            await self._session.execute(
-                insert(user_roles),
-                [{"user_id": user.id, "role": g.role.value, "store_id": g.store_id} for g in user.grants],
-            )
+        if not user.grants:
+            return
+        try:
+            async with self._session.begin_nested():
+                await self._session.execute(
+                    insert(user_roles),
+                    [{"user_id": user.id, "role": g.role.value, "store_id": g.store_id} for g in user.grants],
+                )
+        except IntegrityError as exc:  # store_id → catalog.stores FK
+            raise InvalidUserError("user.unknown_store") from exc
 
 
 def _to_domain(row: RowMapping, grants: frozenset[RoleGrant]) -> User:

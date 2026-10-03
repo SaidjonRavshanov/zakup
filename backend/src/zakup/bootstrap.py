@@ -11,8 +11,41 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
 
 from zakup.modules.catalog.api.router import router as catalog_router
-from zakup.modules.catalog.application.use_cases import ListSuppliers, RegisterSupplier
-from zakup.modules.catalog.infrastructure.repositories import SqlSupplierReader, SqlSupplierRepository
+from zakup.modules.catalog.application.offers import AddOffer, ArchiveOffer, GetPriceHistory, ReviseOffer
+from zakup.modules.catalog.application.products import (
+    ArchiveProduct,
+    CreateCategory,
+    GetProduct,
+    ListCategories,
+    ListProducts,
+    RegisterProduct,
+    ReviseProduct,
+)
+from zakup.modules.catalog.application.purchase_cards import ConfigurePurchaseCard
+from zakup.modules.catalog.application.stores import ArchiveStore, ListStores, RegisterStore, ReviseStore
+from zakup.modules.catalog.application.use_cases import (
+    ArchiveSupplier,
+    GetSupplier,
+    ListSuppliers,
+    RegisterSupplier,
+    ReviseSupplier,
+)
+from zakup.modules.catalog.infrastructure.readers import (
+    SqlCategoryReader,
+    SqlPriceHistoryReader,
+    SqlProductReader,
+    SqlStoreReader,
+    SqlSupplierReader,
+)
+from zakup.modules.catalog.infrastructure.repositories import (
+    SqlCategoryRepository,
+    SqlOfferRepository,
+    SqlPriceHistory,
+    SqlProductRepository,
+    SqlPurchaseCardRepository,
+    SqlStoreRepository,
+    SqlSupplierRepository,
+)
 from zakup.modules.identity.api.router import auth_router, dev_auth_router, me_router, users_router
 from zakup.modules.identity.application.use_cases import (
     ActivateUser,
@@ -145,11 +178,40 @@ def _wire_identity(
         app.include_router(dev_auth_router, prefix="/api/v1")
 
 
-def _wire_catalog(
-    overrides: Overrides,
-    per_request: PerRequest,
-) -> None:
-    overrides[Stub(ListSuppliers)] = per_request(lambda session: ListSuppliers(SqlSupplierReader(session)))
-    overrides[Stub(RegisterSupplier)] = per_request(
-        lambda session: RegisterSupplier(SqlAlchemyUnitOfWork(session), SqlSupplierRepository(session))
-    )
+def _wire_catalog(overrides: Overrides, per_request: PerRequest) -> None:
+    def uow(session: AsyncSession) -> SqlAlchemyUnitOfWork:
+        return SqlAlchemyUnitOfWork(session)
+
+    providers: dict[type, Callable[[AsyncSession], Any]] = {
+        ListSuppliers: lambda s: ListSuppliers(SqlSupplierReader(s)),
+        GetSupplier: lambda s: GetSupplier(SqlSupplierReader(s)),
+        RegisterSupplier: lambda s: RegisterSupplier(uow(s), SqlSupplierRepository(s)),
+        ReviseSupplier: lambda s: ReviseSupplier(uow(s), SqlSupplierRepository(s)),
+        ArchiveSupplier: lambda s: ArchiveSupplier(uow(s), SqlSupplierRepository(s)),
+        ListStores: lambda s: ListStores(SqlStoreReader(s)),
+        RegisterStore: lambda s: RegisterStore(uow(s), SqlStoreRepository(s)),
+        ReviseStore: lambda s: ReviseStore(uow(s), SqlStoreRepository(s)),
+        ArchiveStore: lambda s: ArchiveStore(uow(s), SqlStoreRepository(s)),
+        ListCategories: lambda s: ListCategories(SqlCategoryReader(s)),
+        CreateCategory: lambda s: CreateCategory(uow(s), SqlCategoryRepository(s)),
+        ListProducts: lambda s: ListProducts(SqlProductReader(s)),
+        GetProduct: lambda s: GetProduct(SqlProductReader(s)),
+        RegisterProduct: lambda s: RegisterProduct(uow(s), SqlProductRepository(s), SqlCategoryRepository(s)),
+        ReviseProduct: lambda s: ReviseProduct(uow(s), SqlProductRepository(s), SqlCategoryRepository(s)),
+        ArchiveProduct: lambda s: ArchiveProduct(uow(s), SqlProductRepository(s)),
+        AddOffer: lambda s: AddOffer(
+            uow(s), SqlOfferRepository(s), SqlPriceHistory(s), SqlSupplierRepository(s), SqlProductRepository(s)
+        ),
+        ReviseOffer: lambda s: ReviseOffer(uow(s), SqlOfferRepository(s), SqlPriceHistory(s)),
+        ArchiveOffer: lambda s: ArchiveOffer(uow(s), SqlOfferRepository(s)),
+        GetPriceHistory: lambda s: GetPriceHistory(SqlPriceHistoryReader(s)),
+        ConfigurePurchaseCard: lambda s: ConfigurePurchaseCard(
+            uow(s),
+            SqlPurchaseCardRepository(s),
+            SqlProductRepository(s),
+            SqlStoreRepository(s),
+            SqlSupplierRepository(s),
+        ),
+    }
+    for use_case, build in providers.items():
+        overrides[Stub(use_case)] = per_request(build)

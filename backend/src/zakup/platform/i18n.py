@@ -55,6 +55,107 @@ MESSAGES: Final[dict[str, dict[Locale, str]]] = {
         "uz": "Yetkazib beruvchi boshqa foydalanuvchi tomonidan o'zgartirilgan",
         "ru": "Поставщик изменён другим пользователем",
     },
+    "supplier.not_found": {"uz": "Yetkazib beruvchi topilmadi", "ru": "Поставщик не найден"},
+    "supplier.phone_format": {
+        "uz": "Telefon raqami noto'g'ri (masalan, +998901234567)",
+        "ru": "Неверный номер телефона (например, +998901234567)",
+    },
+    "supplier.email_format": {"uz": "E-mail noto'g'ri", "ru": "Неверный e-mail"},
+    "supplier.lead_time_range": {
+        "uz": "Yetkazish muddati 0 dan {max} kungacha bo'lishi kerak",
+        "ru": "Срок поставки должен быть от 0 до {max} дней",
+    },
+    "supplier.weekdays": {
+        "uz": "Kamida bitta hafta kuni tanlanishi kerak",
+        "ru": "Нужно выбрать хотя бы один день недели",
+    },
+    "invalid_store": {"uz": "Ombor ma'lumotlari noto'g'ri", "ru": "Некорректные данные склада"},
+    "store.name_empty": {"uz": "Ombor nomi bo'sh bo'lishi mumkin emas", "ru": "Название склада не может быть пустым"},
+    "store.name_too_long": {"uz": "Nomi {max} belgidan oshmasin", "ru": "Название не длиннее {max} символов"},
+    "store.not_found": {"uz": "Ombor topilmadi", "ru": "Склад не найден"},
+    "store.modified": {
+        "uz": "Ombor boshqa foydalanuvchi tomonidan o'zgartirilgan",
+        "ru": "Склад изменён другим пользователем",
+    },
+    "invalid_product": {"uz": "Tovar ma'lumotlari noto'g'ri", "ru": "Некорректные данные товара"},
+    "product.name_empty": {"uz": "Tovar nomi bo'sh bo'lishi mumkin emas", "ru": "Название товара не может быть пустым"},
+    "product.name_too_long": {"uz": "Nomi {max} belgidan oshmasin", "ru": "Название не длиннее {max} символов"},
+    "product.base_unit": {
+        "uz": "Bazaviy birlik faqat kg, g, l, ml yoki dona bo'ladi",
+        "ru": "Базовая единица — только кг, г, л, мл или шт",
+    },
+    "product.not_found": {"uz": "Tovar topilmadi", "ru": "Товар не найден"},
+    "product.modified": {
+        "uz": "Tovar boshqa foydalanuvchi tomonidan o'zgartirilgan",
+        "ru": "Товар изменён другим пользователем",
+    },
+    "category.name_empty": {"uz": "Kategoriya nomi bo'sh", "ru": "Название категории пустое"},
+    "category.budget_negative": {
+        "uz": "Byudjet manfiy bo'lishi mumkin emas",
+        "ru": "Бюджет не может быть отрицательным",
+    },
+    "category.not_found": {"uz": "Kategoriya topilmadi", "ru": "Категория не найдена"},
+    "category.modified": {
+        "uz": "Kategoriya boshqa foydalanuvchi tomonidan o'zgartirilgan",
+        "ru": "Категория изменена другим пользователем",
+    },
+    "invalid_offer": {"uz": "Taklif ma'lumotlari noto'g'ri", "ru": "Некорректные данные предложения"},
+    "duplicate_offer": {"uz": "Bunday taklif allaqachon bor", "ru": "Такое предложение уже есть"},
+    "offer.duplicate": {
+        "uz": "Bu yetkazib beruvchida shu tovar (shu artikul bilan) allaqachon bor",
+        "ru": "У этого поставщика уже есть этот товар (с таким артикулом)",
+    },
+    "offer.factor_positive": {
+        "uz": "Qadoqdagi miqdor 0 dan katta bo'lishi kerak",
+        "ru": "Количество в упаковке должно быть больше 0",
+    },
+    "offer.multiple_positive": {"uz": "Karralilik 0 dan katta bo'lishi kerak", "ru": "Кратность должна быть больше 0"},
+    "offer.price_negative": {"uz": "Narx manfiy bo'lishi mumkin emas", "ru": "Цена не может быть отрицательной"},
+    "offer.price_backdated": {
+        "uz": "Yangi narx sanasi joriy narx sanasidan oldin bo'lishi mumkin emas",
+        "ru": "Дата новой цены не может быть раньше даты текущей цены",
+    },
+    "offer.sku_too_long": {"uz": "Artikul {max} belgidan oshmasin", "ru": "Артикул не длиннее {max} символов"},
+    "offer.archived_party": {
+        "uz": "Arxivdagi yetkazib beruvchi yoki tovarga taklif qo'shib bo'lmaydi",
+        "ru": "Нельзя добавить предложение для архивного поставщика или товара",
+    },
+    "offer.not_found": {"uz": "Taklif topilmadi", "ru": "Предложение не найдено"},
+    "offer.modified": {
+        "uz": "Taklif boshqa foydalanuvchi tomonidan o'zgartirilgan",
+        "ru": "Предложение изменено другим пользователем",
+    },
+    "invalid_purchase_card": {"uz": "Xarid kartochkasi noto'g'ri", "ru": "Некорректная карточка закупа"},
+    "card.safety_stock_negative": {
+        "uz": "Minimal qoldiq manfiy bo'lishi mumkin emas",
+        "ru": "Страховой запас не может быть отрицательным",
+    },
+    "card.coverage_range": {
+        "uz": "Qoplash davri 1 dan {max} kungacha",
+        "ru": "Период покрытия — от 1 до {max} дней",
+    },
+    "card.shelf_life_positive": {"uz": "Yaroqlilik muddati kamida 1 kun", "ru": "Срок годности — минимум 1 день"},
+    "card.seasonal_range": {
+        "uz": "Mavsumiy koeffitsiyent {min} dan {max} gacha",
+        "ru": "Сезонный коэффициент — от {min} до {max}",
+    },
+    "card.alternative_without_primary": {
+        "uz": "Avval asosiy yetkazib beruvchini tanlang",
+        "ru": "Сначала выберите основного поставщика",
+    },
+    "card.same_suppliers": {
+        "uz": "Asosiy va muqobil yetkazib beruvchi bir xil bo'lmasin",
+        "ru": "Основной и альтернативный поставщик должны различаться",
+    },
+    "card.auto_needs_supplier": {
+        "uz": "Avto-zakup uchun asosiy yetkazib beruvchi kerak",
+        "ru": "Для авто-закупа нужен основной поставщик",
+    },
+    "card.supplier_archived": {"uz": "Yetkazib beruvchi arxivda", "ru": "Поставщик в архиве"},
+    "card.modified": {
+        "uz": "Kartochka boshqa foydalanuvchi tomonidan o'zgartirilgan",
+        "ru": "Карточка изменена другим пользователем",
+    },
     # --- auth
     "invalid_init_data": {"uz": "Telegram orqali kirish tasdiqlanmadi", "ru": "Вход через Telegram не подтверждён"},
     "auth.init_data_empty": {"uz": "Telegram ma'lumotlari yo'q", "ru": "Нет данных Telegram"},
@@ -95,6 +196,7 @@ MESSAGES: Final[dict[str, dict[Locale, str]]] = {
         "uz": "Rollar soni {max} tadan oshmasligi kerak",
         "ru": "Ролей не может быть больше {max}",
     },
+    "user.unknown_store": {"uz": "Bunday ombor yo'q", "ru": "Такого склада нет"},
     "user.not_found": {"uz": "Foydalanuvchi topilmadi", "ru": "Пользователь не найден"},
     "user.modified": {
         "uz": "Foydalanuvchi boshqa administrator tomonidan o'zgartirilgan",

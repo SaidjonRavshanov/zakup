@@ -56,7 +56,12 @@ async def _clean_tables() -> AsyncIterator[None]:
     yield
     engine = create_async_engine(TEST_DB_URL)
     async with engine.begin() as conn:
-        await conn.execute(text("TRUNCATE catalog.suppliers, platform.outbox, identity.users CASCADE"))
+        await conn.execute(
+            text(
+                "TRUNCATE catalog.suppliers, catalog.stores, catalog.products, catalog.product_categories,"
+                " platform.outbox, identity.users CASCADE"
+            )
+        )
     await engine.dispose()
 
 
