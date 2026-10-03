@@ -1,4 +1,5 @@
 import { createRootRoute, createRoute, createRouter, lazyRouteComponent } from '@tanstack/react-router'
+import { CATALOG_TABS, type CatalogTab } from '@/entities/catalog'
 import { NotFoundPage as NotFound } from '@/pages/not-found/NotFoundPage'
 import { AppShell } from '@/widgets/app-shell/AppShell'
 
@@ -49,6 +50,68 @@ const userEditRoute = createRoute({
   component: lazyRouteComponent(() => import('@/pages/admin-users/UserEditPage')),
 })
 
+
+const catalogRoute = createRoute({
+  getParentRoute: () => shellRoute,
+  path: '/catalog',
+  validateSearch: (search: Record<string, unknown>): { tab?: CatalogTab } =>
+    CATALOG_TABS.includes(search.tab as CatalogTab) ? { tab: search.tab as CatalogTab } : {},
+  component: lazyRouteComponent(() => import('@/pages/catalog/CatalogPage')),
+})
+
+// Bir xil forma yaratish va tahrir uchun: bitta lazy chunk
+const productFormImport = () => import('@/pages/catalog/ProductFormPage')
+const supplierFormImport = () => import('@/pages/catalog/SupplierFormPage')
+const offerFormImport = () => import('@/pages/catalog/OfferFormPage')
+
+const catalogRoutes = [
+  createRoute({
+    getParentRoute: () => shellRoute,
+    path: '/catalog/products/new',
+    component: lazyRouteComponent(productFormImport),
+  }),
+  createRoute({
+    getParentRoute: () => shellRoute,
+    path: '/catalog/products/$productId',
+    component: lazyRouteComponent(() => import('@/pages/catalog/ProductPage')),
+  }),
+  createRoute({
+    getParentRoute: () => shellRoute,
+    path: '/catalog/products/$productId/edit',
+    component: lazyRouteComponent(productFormImport),
+  }),
+  createRoute({
+    getParentRoute: () => shellRoute,
+    path: '/catalog/products/$productId/cards/$storeId',
+    component: lazyRouteComponent(() => import('@/pages/catalog/PurchaseCardPage')),
+  }),
+  createRoute({
+    getParentRoute: () => shellRoute,
+    path: '/catalog/suppliers/new',
+    component: lazyRouteComponent(supplierFormImport),
+  }),
+  createRoute({
+    getParentRoute: () => shellRoute,
+    path: '/catalog/suppliers/$supplierId',
+    component: lazyRouteComponent(() => import('@/pages/catalog/SupplierPage')),
+  }),
+  createRoute({
+    getParentRoute: () => shellRoute,
+    path: '/catalog/suppliers/$supplierId/edit',
+    component: lazyRouteComponent(supplierFormImport),
+  }),
+  createRoute({
+    getParentRoute: () => shellRoute,
+    path: '/catalog/suppliers/$supplierId/offers/new',
+    component: lazyRouteComponent(offerFormImport),
+  }),
+  createRoute({
+    getParentRoute: () => shellRoute,
+    path: '/catalog/suppliers/$supplierId/offers/$offerId',
+    component: lazyRouteComponent(offerFormImport),
+  }),
+] as const
+
 // Prod build'da shart statik false bo'ladi → vitrin chunk'i bundle'ga kirmaydi
 const devUiRoute = createRoute({
   getParentRoute: () => shellRoute,
@@ -57,7 +120,7 @@ const devUiRoute = createRoute({
 })
 
 const routeTree = rootRoute.addChildren([
-  shellRoute.addChildren([dashboardRoute, ordersRoute, receivingRoute, receiveOrderRoute, profileRoute, usersRoute, userEditRoute, devUiRoute]),
+  shellRoute.addChildren([dashboardRoute, ordersRoute, receivingRoute, receiveOrderRoute, profileRoute, usersRoute, userEditRoute, catalogRoute, ...catalogRoutes, devUiRoute]),
 ])
 
 export const router = createRouter({

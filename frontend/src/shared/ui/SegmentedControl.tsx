@@ -22,6 +22,7 @@ export function SegmentedControl<T extends string>({ segments, value, onChange, 
         return (
           <button
             key={segment.value}
+            type="button"
             role="tab"
             aria-selected={active}
             onClick={() => {

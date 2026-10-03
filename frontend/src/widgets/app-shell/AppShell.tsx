@@ -1,15 +1,16 @@
 import { useQuery } from '@tanstack/react-query'
 import { Outlet } from '@tanstack/react-router'
-import { ClipboardList, LayoutGrid, PackageCheck, UserRound, UsersRound } from 'lucide-react'
+import { BookOpen, ClipboardList, LayoutGrid, PackageCheck, UserRound, UsersRound } from 'lucide-react'
 import { meQuery, useActiveRole, type Role } from '@/entities/user'
 import { useI18n, type Messages } from '@/shared/i18n'
 import { BottomNav, type NavItem } from '@/shared/ui'
 
-type NavKey = 'home' | 'orders' | 'receiving' | 'users' | 'profile'
+type NavKey = 'home' | 'orders' | 'catalog' | 'receiving' | 'users' | 'profile'
 
 const ITEMS: Record<NavKey, Omit<NavItem, 'label'>> = {
   home: { to: '/', icon: LayoutGrid },
   orders: { to: '/orders', icon: ClipboardList },
+  catalog: { to: '/catalog', icon: BookOpen },
   receiving: { to: '/receiving', icon: PackageCheck },
   users: { to: '/admin/users', icon: UsersRound },
   profile: { to: '/profile', icon: UserRound },
@@ -20,13 +21,13 @@ const ITEMS: Record<NavKey, Omit<NavItem, 'label'>> = {
  * zayavkalar, to'lovlar, nazorat ekranlari tegishli bosqichlarda qo'shiladi.
  */
 const NAV_BY_ROLE: Record<Role, ReadonlyArray<NavKey>> = {
-  initiator: ['home', 'orders', 'profile'],
-  buyer: ['home', 'orders', 'receiving', 'profile'],
-  approver: ['home', 'orders', 'profile'],
+  initiator: ['home', 'orders', 'catalog', 'profile'],
+  buyer: ['home', 'orders', 'catalog', 'receiving', 'profile'],
+  approver: ['home', 'orders', 'catalog', 'profile'],
   storekeeper: ['home', 'receiving', 'profile'],
-  accountant: ['home', 'orders', 'profile'],
-  auditor: ['home', 'orders', 'receiving', 'profile'],
-  admin: ['home', 'users', 'profile'],
+  accountant: ['home', 'orders', 'catalog', 'profile'],
+  auditor: ['home', 'orders', 'catalog', 'receiving', 'profile'],
+  admin: ['home', 'catalog', 'users', 'profile'],
 }
 
 const buildNav = (role: Role | null, t: Messages): NavItem[] =>
