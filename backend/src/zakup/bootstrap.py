@@ -4,6 +4,7 @@ Yangi modul qo'shish: router'ni `ROUTERS` ga, provider'larni `_wire_*` ga qo'shi
 """
 
 from collections.abc import AsyncIterator, Callable
+from contextlib import asynccontextmanager
 from typing import Annotated, Any, Protocol, TypeVar
 
 from fastapi import APIRouter, Depends, FastAPI
@@ -11,6 +12,7 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
 
 from zakup.modules.catalog.api.router import router as catalog_router
+from zakup.modules.catalog.application.iiko_sync import IikoCatalogSync
 from zakup.modules.catalog.application.offers import AddOffer, ArchiveOffer, GetPriceHistory, ReviseOffer
 from zakup.modules.catalog.application.products import (
     ArchiveProduct,
@@ -38,6 +40,7 @@ from zakup.modules.catalog.infrastructure.readers import (
     SqlSupplierReader,
 )
 from zakup.modules.catalog.infrastructure.repositories import (
+    SqlBranchRepository,
     SqlCategoryRepository,
     SqlOfferRepository,
     SqlPriceHistory,
@@ -65,6 +68,12 @@ from zakup.modules.identity.infrastructure.auth_adapters import (
     TelegramInitDataVerifier,
 )
 from zakup.modules.identity.infrastructure.repositories import SqlUserReader, SqlUserRepository
+from zakup.modules.integration_iiko.api.router import router as iiko_router
+from zakup.modules.integration_iiko.application.runs import ListSyncRuns, RequestSync, SyncScope
+from zakup.modules.integration_iiko.application.sync import ImportPurchasePrices, SyncReferences
+from zakup.modules.integration_iiko.infrastructure.catalog_adapter import CatalogSyncAdapter
+from zakup.modules.integration_iiko.infrastructure.client import HttpIikoGateway, PgAdvisoryLock
+from zakup.modules.integration_iiko.infrastructure.repositories import SqlLinks, SqlSyncRunReader, SqlSyncRuns
 from zakup.platform.access_tokens import AccessTokenCodec, InvalidAccessTokenError
 from zakup.platform.di import Stub
 from zakup.platform.health import router as health_router
@@ -72,7 +81,7 @@ from zakup.platform.uow import SqlAlchemyUnitOfWork
 from zakup.settings import Settings
 from zakup.shared_kernel.auth import Principal
 
-ROUTERS: tuple[APIRouter, ...] = (health_router, auth_router, me_router, users_router, catalog_router)
+ROUTERS: tuple[APIRouter, ...] = (health_router, auth_router, me_router, users_router, catalog_router, iiko_router)
 
 T = TypeVar("T")
 Overrides = dict[Callable[..., Any], Callable[..., Any]]
@@ -108,6 +117,7 @@ def wire(
     overrides[Stub(AsyncEngine)] = lambda: engine
     _wire_identity(app, overrides, per_request, settings)
     _wire_catalog(overrides, per_request)
+    _wire_iiko(overrides, per_request, build_iiko_gateway(settings, engine))
 
 
 def _wire_identity(
@@ -215,3 +225,45 @@ def _wire_catalog(overrides: Overrides, per_request: PerRequest) -> None:
     }
     for use_case, build in providers.items():
         overrides[Stub(use_case)] = per_request(build)
+
+
+# ---------------------------------------------------------------- iiko (API va worker uchun umumiy)
+
+
+def build_iiko_gateway(settings: Settings, engine: AsyncEngine) -> HttpIikoGateway:
+    return HttpIikoGateway(
+        settings.iiko_servers, PgAdvisoryLock(engine, settings.iiko_lock_wait_s), timeout_s=settings.iiko_timeout_s
+    )
+
+
+def iiko_scope_factory(session_factory: async_sessionmaker[AsyncSession]) -> Callable[[], Any]:
+    """Worker: har qadam — alohida sessiya/tranzaksiya (runs + links + catalog bitta sessiyada)."""
+
+    @asynccontextmanager
+    async def scope() -> AsyncIterator[SyncScope]:
+        async with session_factory() as session:
+            links = SqlLinks(session)
+            catalog = CatalogSyncAdapter(
+                IikoCatalogSync(
+                    branches=SqlBranchRepository(session),
+                    stores=SqlStoreRepository(session),
+                    categories=SqlCategoryRepository(session),
+                    products=SqlProductRepository(session),
+                    suppliers=SqlSupplierRepository(session),
+                    offers=SqlOfferRepository(session),
+                    history=SqlPriceHistory(session),
+                )
+            )
+            yield SyncScope(
+                runs=SqlSyncRuns(session),
+                references=SyncReferences(links, catalog),
+                prices=ImportPurchasePrices(links, catalog),
+                commit=session.commit,
+            )
+
+    return scope
+
+
+def _wire_iiko(overrides: Overrides, per_request: PerRequest, gateway: HttpIikoGateway) -> None:
+    overrides[Stub(RequestSync)] = per_request(lambda s: RequestSync(gateway, SqlSyncRuns(s), s.commit))
+    overrides[Stub(ListSyncRuns)] = per_request(lambda s: ListSyncRuns(gateway, SqlSyncRunReader(s)))

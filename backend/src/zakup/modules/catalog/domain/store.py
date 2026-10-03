@@ -36,6 +36,7 @@ class Store(AggregateRoot):
         id: UUID,  # noqa: A002 — domen atamasi
         name: str,
         address: str | None,
+        branch_id: UUID | None = None,
         iiko_id: UUID | None = None,
         archived_at: datetime | None = None,
         version: int = 1,
@@ -44,13 +45,16 @@ class Store(AggregateRoot):
         self.id = id
         self.name = name
         self.address = address
+        self.branch_id = branch_id
         self.iiko_id = iiko_id
         self.archived_at = archived_at
         self.version = version
 
     @classmethod
-    def register(cls, *, name: str, address: str | None = None, iiko_id: UUID | None = None) -> Self:
-        store = cls(id=new_id(), name=_clean_name(name), address=_clean(address), iiko_id=iiko_id)
+    def register(
+        cls, *, name: str, address: str | None = None, branch_id: UUID | None = None, iiko_id: UUID | None = None
+    ) -> Self:
+        store = cls(id=new_id(), name=_clean_name(name), address=_clean(address), branch_id=branch_id, iiko_id=iiko_id)
         store.record(StoreRegistered(aggregate_id=store.id, name=store.name))
         return store
 
@@ -61,6 +65,9 @@ class Store(AggregateRoot):
     def revise(self, *, name: str, address: str | None) -> None:
         self.name = _clean_name(name)
         self.address = _clean(address)
+
+    def assign_branch(self, branch_id: UUID | None) -> None:
+        self.branch_id = branch_id
 
     def archive(self, at: datetime) -> None:
         if self.is_archived:

@@ -13,16 +13,18 @@ dependencies = [
     "pydantic-settings>=2.15",
     "structlog>=26.1",
     "pyjwt>=2.10",
+    "httpx>=0.28",
+    "defusedxml>=0.7",
 ]
 
 [project.optional-dependencies]
 dev = [
     "pytest>=9.1",
     "pytest-asyncio>=1.0",
-    "httpx>=0.28",
     "ruff>=0.16",
     "mypy>=2.4",
     "import-linter>=2.15",
+    "types-defusedxml>=0.7",
 ]
 
 [build-system]
@@ -50,6 +52,8 @@ known-first-party = ["zakup", "tests"]
 [tool.ruff.lint.per-file-ignores]
 # Ikki tilli matnlar: kirill harflari ataylab ishlatilgan
 "src/zakup/platform/i18n.py" = ["RUF001"]
+# iiko ma'lumotidagi kirill birlik nomlari / belgilari ataylab
+"src/zakup/modules/integration_iiko/domain/mapping.py" = ["RUF001"]
 "tests/**" = ["PLR2004", "S105", "S106", "RUF001"]
 "alembic/**" = ["N999"]
 
@@ -85,7 +89,7 @@ forbidden_modules = ["fastapi", "sqlalchemy", "pydantic", "asyncpg", "zakup.plat
 [[tool.importlinter.contracts]]
 name = "Modul ichidagi qatlamlar: (api | infrastructure) -> application -> domain"
 type = "layers"
-containers = ["zakup.modules.catalog", "zakup.modules.identity"]
+containers = ["zakup.modules.catalog", "zakup.modules.identity", "zakup.modules.integration_iiko"]
 # api va infrastructure bir-birini bilmaydi: ular bootstrap.py (composition root) da ulanadi
 layers = ["api | infrastructure", "application", "domain"]
 
@@ -94,3 +98,10 @@ name = "Application qatlami infrastructure'ni import qilmaydi (DIP)"
 type = "forbidden"
 source_modules = ["zakup.modules.*.application"]
 forbidden_modules = ["zakup.modules.*.infrastructure", "zakup.modules.*.api", "fastapi", "sqlalchemy"]
+
+[[tool.importlinter.contracts]]
+name = "Modullar bir-birining faqat application qatlamini chaqiradi (ARCHITECTURE §3.1)"
+type = "forbidden"
+source_modules = ["zakup.modules.integration_iiko"]
+forbidden_modules = ["zakup.modules.catalog.domain", "zakup.modules.catalog.infrastructure", "zakup.modules.catalog.api"]
+allow_indirect_imports = true

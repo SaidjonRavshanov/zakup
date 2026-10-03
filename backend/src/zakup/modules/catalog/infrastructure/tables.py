@@ -50,6 +50,7 @@ suppliers = Table(
     Column("delivery_weekdays", ARRAY(SmallInteger), nullable=False, server_default="{1,2,3,4,5,6,7}"),
     Column("order_cutoff", Time),
     Column("contacts", JSONB, nullable=False, server_default="{}"),
+    Column("payment_methods", ARRAY(Text), nullable=False, server_default="{}"),
     Column("archived_at", DateTime(timezone=True)),
     *_audit_columns(),
     CheckConstraint("payment_terms IN ('prepay', 'on_delivery', 'deferred')", name="payment_terms"),
@@ -64,11 +65,24 @@ suppliers = Table(
     schema="catalog",
 )
 
+branches = Table(
+    "branches",
+    metadata,
+    Column("id", UUID(as_uuid=True), primary_key=True),
+    Column("iiko_id", UUID(as_uuid=True), unique=True),
+    Column("code", Text),
+    Column("name", Text, nullable=False),
+    Column("archived_at", DateTime(timezone=True)),
+    *_audit_columns(),
+    schema="catalog",
+)
+
 stores = Table(
     "stores",
     metadata,
     Column("id", UUID(as_uuid=True), primary_key=True),
     Column("iiko_id", UUID(as_uuid=True), unique=True),
+    Column("branch_id", UUID(as_uuid=True), ForeignKey("catalog.branches.id")),
     Column("name", Text, nullable=False),
     Column("address", Text),
     Column("archived_at", DateTime(timezone=True)),
@@ -104,6 +118,7 @@ products = Table(
     CheckConstraint(f"base_unit {_UNIT_CHECK}", name="base_unit"),
     Index("ix_products_name_trgm", "name", postgresql_using="gin", postgresql_ops={"name": "gin_trgm_ops"}),
     Index("ix_products_category_id", "category_id"),
+    Index("ix_products_article", "article", postgresql_where=text("article IS NOT NULL")),
     schema="catalog",
 )
 

@@ -115,6 +115,7 @@ class SupplierOffer(AggregateRoot):
         valid_from: date,
         supplier_sku: str | None = None,
         supplier_name: str | None = None,
+        source: PriceSource = PriceSource.MANUAL,
     ) -> tuple[Self, PriceRecord]:
         offer = cls(
             id=new_id(),
@@ -126,7 +127,7 @@ class SupplierOffer(AggregateRoot):
             price=_check_price(price),
             price_valid_from=valid_from,
         )
-        return offer, PriceRecord(offer.id, offer.price, valid_from, PriceSource.MANUAL)
+        return offer, PriceRecord(offer.id, offer.price, valid_from, source)
 
     @property
     def is_archived(self) -> bool:

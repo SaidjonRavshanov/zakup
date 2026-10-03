@@ -22,6 +22,7 @@ class SupplierListItem:
     deferral_days: int
     credit_limit: Decimal
     archived: bool
+    payment_methods: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -63,6 +64,7 @@ class SupplierDetail:
     contacts: ContactsData
     archived: bool
     version: int
+    payment_methods: tuple[str, ...] = ()
     offers: tuple["OfferItem", ...] = ()
 
 
@@ -76,6 +78,8 @@ class StoreItem:
     address: str | None
     from_iiko: bool
     archived: bool
+    branch_id: UUID | None = None
+    branch_name: str | None = None
 
 
 @dataclass(frozen=True, slots=True)

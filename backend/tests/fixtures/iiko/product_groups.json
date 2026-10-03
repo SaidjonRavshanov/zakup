@@ -1,0 +1,1 @@
+[{"id":"cccccccc-0000-4000-8000-000000000001","deleted":false,"name":"Товары","parent":null,"num":"01","code":"1"},{"id":"cccccccc-0000-4000-8000-000000000002","deleted":false,"name":"Бакалея","parent":"cccccccc-0000-4000-8000-000000000001","num":"02","code":"2"},{"id":"cccccccc-0000-4000-8000-000000000003","deleted":false,"name":"Блюда","parent":null,"num":"03","code":"3"}]

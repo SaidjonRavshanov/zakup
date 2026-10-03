@@ -27,6 +27,13 @@ class PaymentTerms(StrEnum):
     DEFERRED = "deferred"
 
 
+class PaymentMethod(StrEnum):
+    """Naqd (НАЛ) yoki pul o'tkazish (ПЕР). Tarnov'da bitta yetkazuvchi ikkalasi bilan ham ishlashi mumkin."""
+
+    CASH = "cash"
+    TRANSFER = "transfer"
+
+
 class InvalidSupplierError(DomainError):
     code = "invalid_supplier"
 
@@ -100,6 +107,7 @@ class Supplier(AggregateRoot):
         min_order_amount: Money,
         schedule: OrderSchedule | None = None,
         contacts: Contacts | None = None,
+        payment_methods: frozenset[PaymentMethod] = frozenset(),
         iiko_id: UUID | None = None,
         archived_at: datetime | None = None,
         version: int = 1,
@@ -114,6 +122,7 @@ class Supplier(AggregateRoot):
         self.min_order_amount = min_order_amount
         self.schedule = schedule or OrderSchedule()
         self.contacts = contacts or Contacts()
+        self.payment_methods = payment_methods
         self.iiko_id = iiko_id
         self.archived_at = archived_at
         self.version = version
@@ -130,6 +139,8 @@ class Supplier(AggregateRoot):
         min_order_amount: Money | None = None,
         schedule: OrderSchedule | None = None,
         contacts: Contacts | None = None,
+        payment_methods: frozenset[PaymentMethod] = frozenset(),
+        iiko_id: UUID | None = None,
     ) -> Self:
         name = name.strip()
         inn = inn.strip() if inn else None
@@ -144,6 +155,8 @@ class Supplier(AggregateRoot):
             min_order_amount=min_order_amount or Money.zero(),
             schedule=schedule,
             contacts=contacts,
+            payment_methods=payment_methods,
+            iiko_id=iiko_id,
         )
         supplier.record(SupplierRegistered(aggregate_id=supplier.id, name=name, inn=inn))
         return supplier
@@ -178,12 +191,36 @@ class Supplier(AggregateRoot):
         self.contacts = contacts
         self.record(SupplierUpdated(aggregate_id=self.id))
 
+    def accept_payment_method(self, method: PaymentMethod) -> None:
+        self.payment_methods = self.payment_methods | {method}
+
+    def fill_missing_contacts(self, *, phone: str | None) -> None:
+        """Sinxronizatsiya: foydalanuvchi kiritgan kontaktni ustidan yozmaydi, faqat bo'shini to'ldiradi."""
+        if phone and not self.contacts.phone:
+            self.contacts = Contacts(
+                phone=phone, telegram=self.contacts.telegram, email=self.contacts.email, person=self.contacts.person
+            )
+
     def archive(self, at: datetime) -> None:
         """O'chirilmaydi — arxivlanadi: yangi zayavkalarda yo'q, tarixda qoladi (WORKFLOW B1)."""
         if self.is_archived:
             return
         self.archived_at = at
         self.record(SupplierArchived(aggregate_id=self.id))
+
+
+def normalize_inn(raw: str | None) -> str | None:
+    """Tashqi manbadan (iiko) kelgan STIR: format noto'g'ri bo'lsa — None (xato emas)."""
+    digits = "".join(ch for ch in (raw or "") if ch.isdigit())
+    return digits if _INN_RE.match(digits) else None
+
+
+def normalize_phone(raw: str | None) -> str | None:
+    """ "97 122 10 02" → "+998971221002"; tanilmasa — None."""
+    digits = "".join(ch for ch in (raw or "") if ch.isdigit())
+    if len(digits) == 9:  # noqa: PLR2004 — O'zbekiston mahalliy raqami
+        digits = "998" + digits
+    return f"+{digits}" if _PHONE_RE.match(f"+{digits}") and len(digits) >= 11 else None  # noqa: PLR2004
 
 
 def _validate(*, name: str, inn: str | None, payment_terms: PaymentTerms, deferral_days: int) -> None:

@@ -8,12 +8,14 @@ from sqlalchemy import Table, exists, func, insert, select, update
 from sqlalchemy.engine import RowMapping
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from zakup.modules.catalog.domain.branch import Branch
 from zakup.modules.catalog.domain.offer import Packaging, PriceRecord, SupplierOffer
 from zakup.modules.catalog.domain.product import Product, ProductCategory, Unit
 from zakup.modules.catalog.domain.purchase_card import Norms, PurchaseCard, PurchaseMode, SupplierChoice
 from zakup.modules.catalog.domain.store import Store
-from zakup.modules.catalog.domain.supplier import Contacts, OrderSchedule, PaymentTerms, Supplier
+from zakup.modules.catalog.domain.supplier import Contacts, OrderSchedule, PaymentMethod, PaymentTerms, Supplier
 from zakup.modules.catalog.infrastructure.tables import (
+    branches,
     product_categories,
     products,
     purchase_cards,
@@ -80,6 +82,7 @@ def _supplier_row(supplier: Supplier) -> dict[str, Any]:
         "delivery_weekdays": sorted(supplier.schedule.delivery_weekdays),
         "order_cutoff": supplier.schedule.order_cutoff,
         "contacts": {k: v for k, v in _contacts_dict(contacts).items() if v},
+        "payment_methods": sorted(m.value for m in supplier.payment_methods),
         "archived_at": supplier.archived_at,
     }
 
@@ -105,6 +108,7 @@ def _supplier(row: RowMapping) -> Supplier:
             order_cutoff=row["order_cutoff"],
         ),
         contacts=Contacts(**row["contacts"]),
+        payment_methods=frozenset(PaymentMethod(m) for m in row["payment_methods"]),
         archived_at=row["archived_at"],
         version=row["version"],
     )
@@ -130,7 +134,13 @@ class SqlStoreRepository(_TableRepository[Store]):
     table = stores
     conflict_key = "store.modified"
     to_row = staticmethod(
-        lambda s: {"iiko_id": s.iiko_id, "name": s.name, "address": s.address, "archived_at": s.archived_at}
+        lambda s: {
+            "iiko_id": s.iiko_id,
+            "branch_id": s.branch_id,
+            "name": s.name,
+            "address": s.address,
+            "archived_at": s.archived_at,
+        }
     )
     to_domain = staticmethod(
         lambda r: Store(
@@ -138,6 +148,25 @@ class SqlStoreRepository(_TableRepository[Store]):
             iiko_id=r["iiko_id"],
             name=r["name"],
             address=r["address"],
+            branch_id=r["branch_id"],
+            archived_at=r["archived_at"],
+            version=r["version"],
+        )
+    )
+
+
+class SqlBranchRepository(_TableRepository[Branch]):
+    table = branches
+    conflict_key = "branch.modified"
+    to_row = staticmethod(
+        lambda b: {"iiko_id": b.iiko_id, "code": b.code, "name": b.name, "archived_at": b.archived_at}
+    )
+    to_domain = staticmethod(
+        lambda r: Branch(
+            id=r["id"],
+            iiko_id=r["iiko_id"],
+            code=r["code"],
+            name=r["name"],
             archived_at=r["archived_at"],
             version=r["version"],
         )
@@ -168,6 +197,11 @@ class SqlCategoryRepository(_TableRepository[ProductCategory]):
 
 
 class SqlProductRepository(_TableRepository[Product]):
+    async def find_by_article(self, article: str) -> Product | None:
+        query = select(products).where(products.c.article == article).order_by(products.c.archived_at.is_not(None))
+        row = (await self._session.execute(query.limit(1))).mappings().first()
+        return type(self).to_domain(row) if row else None
+
     table = products
     conflict_key = "product.modified"
     to_row = staticmethod(
@@ -232,6 +266,16 @@ class SqlOfferRepository(_TableRepository[SupplierOffer]):
     conflict_key = "offer.modified"
     to_row = staticmethod(_offer_row)
     to_domain = staticmethod(_offer)
+
+    async def find(self, *, supplier_id: UUID, product_id: UUID, supplier_sku: str | None) -> SupplierOffer | None:
+        sku = supplier_products.c.supplier_sku
+        query = select(supplier_products).where(
+            supplier_products.c.supplier_id == supplier_id,
+            supplier_products.c.product_id == product_id,
+            sku.is_(None) if supplier_sku is None else sku == supplier_sku,
+        )
+        row = (await self._session.execute(query)).mappings().first()
+        return _offer(row) if row else None
 
     async def exists(self, *, supplier_id: UUID, product_id: UUID, supplier_sku: str | None) -> bool:
         sku = supplier_products.c.supplier_sku

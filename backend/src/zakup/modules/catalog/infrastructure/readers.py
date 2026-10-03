@@ -26,6 +26,7 @@ from zakup.modules.catalog.domain.product import Unit
 from zakup.modules.catalog.domain.purchase_card import PurchaseMode
 from zakup.modules.catalog.domain.supplier import PaymentTerms
 from zakup.modules.catalog.infrastructure.tables import (
+    branches,
     product_categories,
     products,
     purchase_cards,
@@ -89,6 +90,7 @@ class SqlSupplierReader:
             suppliers.c.payment_terms,
             suppliers.c.deferral_days,
             suppliers.c.credit_limit,
+            suppliers.c.payment_methods,
             suppliers.c.archived_at,
         ).order_by(suppliers.c.name, suppliers.c.id)
         if not include_archived:
@@ -105,6 +107,7 @@ class SqlSupplierReader:
                 deferral_days=row.deferral_days,
                 credit_limit=row.credit_limit,
                 archived=row.archived_at is not None,
+                payment_methods=tuple(row.payment_methods),
             )
             for row in rows
         ]
@@ -128,6 +131,7 @@ class SqlSupplierReader:
             contacts=ContactsData(**row.contacts),
             archived=row.archived_at is not None,
             version=row.version,
+            payment_methods=tuple(row.payment_methods),
             offers=await _offers(self._session, supplier_products.c.supplier_id == supplier_id),
         )
 
@@ -137,7 +141,11 @@ class SqlStoreReader:
         self._session = session
 
     async def list(self, *, include_archived: bool) -> list[StoreItem]:
-        query = select(stores).order_by(stores.c.name, stores.c.id)
+        query = (
+            select(stores, branches.c.name.label("branch_name"))
+            .outerjoin(branches, branches.c.id == stores.c.branch_id)
+            .order_by(branches.c.code.nulls_first(), stores.c.name, stores.c.id)
+        )
         if not include_archived:
             query = query.where(stores.c.archived_at.is_(None))
         rows = (await self._session.execute(query)).all()
@@ -148,6 +156,8 @@ class SqlStoreReader:
                 address=row.address,
                 from_iiko=row.iiko_id is not None,
                 archived=row.archived_at is not None,
+                branch_id=row.branch_id,
+                branch_name=row.branch_name,
             )
             for row in rows
         ]

@@ -12,12 +12,23 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import create_async_engine
 
 from zakup.entrypoints.api import create_app
-from zakup.settings import Settings
+from zakup.settings import IikoServerSettings, Settings
 
 TEST_DB_URL = os.environ.get("ZAKUP_TEST_DATABASE_URL", "postgresql+asyncpg://postgres@127.0.0.1:5432/zakup_test")
 BACKEND_DIR = Path(__file__).resolve().parents[2]
 ADMIN_TELEGRAM_ID = 1001
 BOT_TOKEN = "123456:TEST-bot-token"
+FAKE_IIKO_SERVERS = [
+    IikoServerSettings(
+        code=code,
+        name=code.title(),
+        base_url="http://fake-iiko/resto",  # type: ignore[arg-type]
+        login="zakup",
+        password="secret",  # type: ignore[arg-type]
+        department_code=department,
+    )
+    for code, department in (("sebzar", "1"), ("drujba", "2"))
+]
 
 
 async def sign_in(client: AsyncClient, telegram_id: int, first_name: str = "Test") -> Response:
@@ -30,12 +41,15 @@ def bearer(session: dict[str, str]) -> dict[str, str]:
 
 @pytest.fixture(scope="session")
 def settings() -> Settings:
+    # _env_file=None: lokal backend/.env (haqiqiy iiko parollari) testlarga tushmasin
     return Settings(
+        _env_file=None,  # type: ignore[call-arg]
         env="test",
         database_url=TEST_DB_URL,  # type: ignore[arg-type]
         dev_auth_bypass=True,
         bootstrap_admin_ids=[ADMIN_TELEGRAM_ID],
         telegram_bot_token=BOT_TOKEN,  # type: ignore[arg-type]
+        iiko_servers=FAKE_IIKO_SERVERS,
     )
 
 
@@ -59,7 +73,7 @@ async def _clean_tables() -> AsyncIterator[None]:
         await conn.execute(
             text(
                 "TRUNCATE catalog.suppliers, catalog.stores, catalog.products, catalog.product_categories,"
-                " platform.outbox, identity.users CASCADE"
+                " catalog.branches, platform.outbox, identity.users, iiko.links, iiko.sync_runs CASCADE"
             )
         )
     await engine.dispose()

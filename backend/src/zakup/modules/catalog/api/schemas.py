@@ -41,6 +41,7 @@ class SupplierOut(BaseModel):
     deferral_days: int
     credit_limit: Decimal
     archived: bool
+    payment_methods: list[str]
 
 
 class ContactsSchema(BaseModel):
@@ -111,6 +112,7 @@ class SupplierDetailOut(BaseModel):
     order_cutoff: time | None
     contacts: ContactsSchema
     archived: bool
+    payment_methods: list[str]
     offers: list[OfferOut]
 
 
@@ -130,6 +132,8 @@ class StoreOut(BaseModel):
     address: str | None
     from_iiko: bool
     archived: bool
+    branch_id: UUID | None
+    branch_name: str | None
 
 
 class CategoryIn(BaseModel):

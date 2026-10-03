@@ -156,6 +156,40 @@ MESSAGES: Final[dict[str, dict[Locale, str]]] = {
         "uz": "Kartochka boshqa foydalanuvchi tomonidan o'zgartirilgan",
         "ru": "Карточка изменена другим пользователем",
     },
+    "invalid_branch": {"uz": "Filial ma'lumotlari noto'g'ri", "ru": "Некорректные данные филиала"},
+    "branch.name_empty": {"uz": "Filial nomi bo'sh", "ru": "Название филиала пустое"},
+    "branch.modified": {
+        "uz": "Filial boshqa foydalanuvchi tomonidan o'zgartirilgan",
+        "ru": "Филиал изменён другим пользователем",
+    },
+    # --- iiko
+    "iiko_unavailable": {"uz": "iiko serveri javob bermayapti", "ru": "Сервер iiko не отвечает"},
+    "iiko.unavailable": {
+        "uz": "iiko serveri bilan aloqa yo'q. Keyinroq urinib ko'ring",
+        "ru": "Нет связи с сервером iiko. Попробуйте позже",
+    },
+    "iiko.bad_status": {"uz": "iiko xato qaytardi (HTTP {status})", "ru": "iiko вернул ошибку (HTTP {status})"},
+    "iiko.session_busy": {
+        "uz": "iiko ({server}) bilan boshqa sinxronizatsiya ishlayapti",
+        "ru": "С iiko ({server}) уже идёт другая синхронизация",
+    },
+    "iiko_auth": {"uz": "iiko'ga kirib bo'lmadi", "ru": "Не удалось войти в iiko"},
+    "iiko.auth_failed": {
+        "uz": "iiko ({server}): login yoki parol noto'g'ri, yoki litsenziya band",
+        "ru": "iiko ({server}): неверный логин/пароль или лицензия занята",
+    },
+    "iiko_response": {"uz": "iiko javobi tushunarsiz", "ru": "Непонятный ответ iiko"},
+    "iiko.bad_xml": {"uz": "iiko javobi (XML) buzilgan", "ru": "Повреждённый ответ iiko (XML)"},
+    "iiko.bad_json": {"uz": "iiko javobi (JSON) buzilgan", "ru": "Повреждённый ответ iiko (JSON)"},
+    "iiko.bad_id": {"uz": "iiko javobida noto'g'ri ID: {what}", "ru": "Неверный ID в ответе iiko: {what}"},
+    "iiko.bad_number": {"uz": "iiko javobida noto'g'ri son: {value}", "ru": "Неверное число в ответе iiko: {value}"},
+    "iiko.server_not_found": {"uz": "Bunday iiko serveri sozlanmagan", "ru": "Такой сервер iiko не настроен"},
+    "invalid_sync_request": {"uz": "Sinxronizatsiya so'rovi noto'g'ri", "ru": "Некорректный запрос синхронизации"},
+    "iiko.days_range": {"uz": "Davr 1 dan {max} kungacha", "ru": "Период — от 1 до {max} дней"},
+    "iiko.sync_pending": {
+        "uz": "Bu server uchun sinxronizatsiya allaqachon navbatda",
+        "ru": "Синхронизация для этого сервера уже в очереди",
+    },
     # --- auth
     "invalid_init_data": {"uz": "Telegram orqali kirish tasdiqlanmadi", "ru": "Вход через Telegram не подтверждён"},
     "auth.init_data_empty": {"uz": "Telegram ma'lumotlari yo'q", "ru": "Нет данных Telegram"},

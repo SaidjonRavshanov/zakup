@@ -12,6 +12,7 @@ from zakup.modules.catalog.application.dto import (
     SupplierDetail,
     SupplierListItem,
 )
+from zakup.modules.catalog.domain.branch import Branch
 from zakup.modules.catalog.domain.offer import PriceRecord, SupplierOffer
 from zakup.modules.catalog.domain.product import Product, ProductCategory
 from zakup.modules.catalog.domain.purchase_card import PurchaseCard
@@ -38,14 +39,20 @@ class SupplierRepository(Repository[Supplier], Protocol):
 class StoreRepository(Repository[Store], Protocol): ...
 
 
+class BranchRepository(Repository[Branch], Protocol): ...
+
+
 class CategoryRepository(Repository[ProductCategory], Protocol): ...
 
 
-class ProductRepository(Repository[Product], Protocol): ...
+class ProductRepository(Repository[Product], Protocol):
+    async def find_by_article(self, article: str) -> Product | None: ...
 
 
 class OfferRepository(Repository[SupplierOffer], Protocol):
     async def exists(self, *, supplier_id: UUID, product_id: UUID, supplier_sku: str | None) -> bool: ...
+
+    async def find(self, *, supplier_id: UUID, product_id: UUID, supplier_sku: str | None) -> SupplierOffer | None: ...
 
 
 class PriceHistory(Protocol):
