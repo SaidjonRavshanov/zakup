@@ -21,6 +21,7 @@ export {
   type Contacts,
   type Offer,
   type OfferInput,
+  type PaymentMethod,
   type PaymentTerms,
   type PriceHistoryEntry,
   type ProductDetail,

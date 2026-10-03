@@ -29,6 +29,18 @@ cp .env.example .env
 .venv/Scripts/uvicorn zakup.entrypoints.api:app --host 127.0.0.1 --port 8010 --reload --reload-dir src
 ```
 
+### 2a. Worker (iiko sinxronizatsiyasi) va soxta iiko
+```bash
+cd backend
+.venv/Scripts/python -m zakup.entrypoints.worker          # iiko.sync_runs navbatini bajaradi
+# Lokal: haqiqiy iiko o'rniga soxta server (javob formatlari — iikoRMS 9.2)
+ZAKUP_FAKE_IIKO_DIR=tests/fixtures/iiko .venv/Scripts/uvicorn --factory tests.fakes.iiko_server:app_from_env --port 8090
+```
+- `ZAKUP_IIKO_SERVERS` (JSON) — filiallar serverlari. Lokal `.env` da soxta server (`http://127.0.0.1:8090/resto`, login `zakup` / `secret`).
+- **Haqiqiy Tarnov serverlari faqat alohida zakup logini bilan.** `BaxodirII` — hisobot sinxronizatsiyasining logini,
+  litsenziya bitta API-sessiyaga ruxsat beradi: bir logindan foydalanilsa, tizimlar bir-birini chiqarib yuboradi.
+- Sinxronizatsiya: admin → **iiko** sahifasi → "Ma'lumotnoma" / "Xarid narxlari". API iiko'ga o'zi chiqmaydi (ADR-05).
+
 ### 3. Frontend → http://127.0.0.1:5173
 ```bash
 cd frontend

@@ -44,6 +44,11 @@ export default function SupplierPage() {
               ? `${t.paymentTerms.deferred} · ${s.leadDays(supplier.deferral_days)}`
               : t.paymentTerms[supplier.payment_terms]}
           </StatusBadge>
+          {supplier.payment_methods.map((m) => (
+            <StatusBadge key={m} tone="info">
+              {t.paymentMethod[m]}
+            </StatusBadge>
+          ))}
           {supplier.archived && <StatusBadge tone="warning">{t.catalog.archived}</StatusBadge>}
         </div>
         {contacts.length > 0 && <p className="mt-3 text-[13px] text-text-2">{contacts.join(' · ')}</p>}

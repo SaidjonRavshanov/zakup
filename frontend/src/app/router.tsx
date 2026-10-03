@@ -59,6 +59,12 @@ const catalogRoute = createRoute({
   component: lazyRouteComponent(() => import('@/pages/catalog/CatalogPage')),
 })
 
+const iikoRoute = createRoute({
+  getParentRoute: () => shellRoute,
+  path: '/admin/iiko',
+  component: lazyRouteComponent(() => import('@/pages/admin-iiko/IikoSyncPage')),
+})
+
 // Bir xil forma yaratish va tahrir uchun: bitta lazy chunk
 const productFormImport = () => import('@/pages/catalog/ProductFormPage')
 const supplierFormImport = () => import('@/pages/catalog/SupplierFormPage')
@@ -120,7 +126,7 @@ const devUiRoute = createRoute({
 })
 
 const routeTree = rootRoute.addChildren([
-  shellRoute.addChildren([dashboardRoute, ordersRoute, receivingRoute, receiveOrderRoute, profileRoute, usersRoute, userEditRoute, catalogRoute, ...catalogRoutes, devUiRoute]),
+  shellRoute.addChildren([dashboardRoute, ordersRoute, receivingRoute, receiveOrderRoute, profileRoute, usersRoute, userEditRoute, iikoRoute, catalogRoute, ...catalogRoutes, devUiRoute]),
 ])
 
 export const router = createRouter({

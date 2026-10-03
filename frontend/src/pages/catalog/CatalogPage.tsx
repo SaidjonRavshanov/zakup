@@ -2,7 +2,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useNavigate, useSearch } from '@tanstack/react-router'
 import { Plus } from 'lucide-react'
 import { useDeferredValue, useState, type FormEvent } from 'react'
-import { CATALOG_KEY, CATALOG_TABS, catalogApi, productsQuery, storesQuery, suppliersQuery } from '@/entities/catalog'
+import { CATALOG_KEY, CATALOG_TABS, catalogApi, productsQuery, storesQuery, suppliersQuery, type Store } from '@/entities/catalog'
 import { useHasRole } from '@/entities/user'
 import { describeError } from '@/shared/api/errors'
 import { useI18n } from '@/shared/i18n'
@@ -11,6 +11,7 @@ import {
   FormError,
   LaserButton,
   ListRow,
+  MonoLabel,
   PageHeader,
   SearchPill,
   SegmentedControl,
@@ -124,6 +125,11 @@ function SuppliersTab() {
                   ? `${t.paymentTerms.deferred} · ${t.catalog.supplier.leadDays(supplier.deferral_days)}`
                   : t.paymentTerms[supplier.payment_terms]
               }
+              badge={
+                supplier.payment_methods.length ? (
+                  <StatusBadge tone="info">{supplier.payment_methods.map((m) => t.paymentMethod[m]).join(' · ')}</StatusBadge>
+                ) : undefined
+              }
               onClick={() => navigate({ to: '/catalog/suppliers/$supplierId', params: { supplierId: supplier.id } })}
             />
           ))
@@ -131,6 +137,16 @@ function SuppliersTab() {
       </div>
     </>
   )
+}
+
+/** Filial tartibi backend'dan keladi (bo'lim kodi bo'yicha); filialsiz — "—". */
+function groupByBranch(stores: Store[]): Array<[string, Store[]]> {
+  const groups = new Map<string, Store[]>()
+  for (const store of stores) {
+    const key = store.branch_name ?? '—'
+    groups.set(key, [...(groups.get(key) ?? []), store])
+  }
+  return [...groups.entries()]
 }
 
 function StoresTab() {
@@ -161,13 +177,20 @@ function StoresTab() {
       ) : !stores?.length ? (
         <EmptyState code="0" title={t.common.notFound} description={t.catalog.emptyStores} />
       ) : (
-        stores.map((store) => (
-          <ListRow
-            key={store.id}
-            title={store.name}
-            subtitle={store.address ?? undefined}
-            badge={store.from_iiko ? <StatusBadge tone="info">{t.catalog.fromIiko}</StatusBadge> : undefined}
-          />
+        groupByBranch(stores).map(([branch, items]) => (
+          <section key={branch} className="mb-2">
+            <MonoLabel className="mb-2 mt-2">{`${branch} · ${items.length}`}</MonoLabel>
+            <div className="flex flex-col gap-2">
+              {items.map((store) => (
+                <ListRow
+                  key={store.id}
+                  title={store.name}
+                  subtitle={store.address ?? undefined}
+                  badge={store.from_iiko ? <StatusBadge tone="info">{t.catalog.fromIiko}</StatusBadge> : undefined}
+                />
+              ))}
+            </div>
+          </section>
         ))
       )}
 

@@ -23,6 +23,8 @@ export interface Contacts {
   person?: string | null
 }
 
+export type PaymentMethod = 'cash' | 'transfer'
+
 export interface SupplierListItem {
   id: string
   name: string
@@ -31,6 +33,7 @@ export interface SupplierListItem {
   deferral_days: number
   credit_limit: DecimalString
   archived: boolean
+  payment_methods: PaymentMethod[]
 }
 
 export interface Offer {
@@ -65,6 +68,7 @@ export interface SupplierDetail {
   order_cutoff: string | null
   contacts: Contacts
   archived: boolean
+  payment_methods: PaymentMethod[]
   offers: Offer[]
 }
 
@@ -88,6 +92,8 @@ export interface Store {
   address: string | null
   from_iiko: boolean
   archived: boolean
+  branch_id: string | null
+  branch_name: string | null
 }
 
 export interface Category {
