@@ -137,3 +137,26 @@ class ImportResult:
     valid: bool
     document_number: str | None
     error: str | None
+
+
+@dataclass(frozen=True, slots=True)
+class IikoStockBalance:
+    """`v2/reports/balance/stores`: ombordagi qoldiq (mahsulotning asosiy birligida; manfiy bo'lishi mumkin)."""
+
+    store_id: UUID
+    product_id: UUID
+    amount: Decimal
+
+
+@dataclass(frozen=True, slots=True)
+class IikoMovement:
+    """OLAP TRANSACTIONS qatori: ombor x tovar x kun x tranzaksiya turi — chiqim (asosiy birlikda).
+
+    `store_id` — `Account.Id`: omborlar uchun ombor GUID'i; boshqa hisoblar (daromad, qarz) — tashlab yuboriladi.
+    """
+
+    store_id: UUID
+    product_id: UUID
+    day: date
+    type: str
+    amount_out: Decimal

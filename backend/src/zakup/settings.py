@@ -77,6 +77,10 @@ class Settings(BaseSettings):
     # To'lovlar (WORKFLOW B12): zayavka tasdiqlanadimi; qarzi muddati o'tgan / limiti tugagan yetkazuvchiga buyurtma:
     # require_admin — faqat admin tasdiqlaydi, block — taqiqlanadi, off — tekshirilmaydi
     payment_approval_required: bool = True
+    # Avto-zakup (WORKFLOW B3/B4a): Toshkent soati; None — o'chirilgan. Avval iiko sinxroni, keyin qoralamalar.
+    daily_sync_hour: int | None = 5
+    auto_requests_hour: int | None = 6
+    demand_window_days: int = 28  # o'rtacha kunlik sarf oynasi
     supplier_debt_policy: Literal["require_admin", "block", "off"] = "require_admin"
 
     cors_origins: list[str] = ["http://localhost:5173", "http://127.0.0.1:5173"]

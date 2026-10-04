@@ -61,6 +61,14 @@ class OfferChoice:
     price_per_base: Decimal
 
 
+@dataclass(frozen=True, slots=True)
+class Suggestion:
+    """Avto-zayavka taklifi: hisoblangan miqdor va "nega shuncha" (sarf, qoldiq, yo'lda, formula)."""
+
+    qty: Decimal
+    calc: dict[str, str | None]
+
+
 @dataclass(slots=True)
 class RequestLine:
     id: UUID
@@ -69,6 +77,7 @@ class RequestLine:
     note: str | None = None
     offer: OfferChoice | None = None
     decision: LineDecision = LineDecision.PENDING
+    suggestion: Suggestion | None = None  # faqat avto-zayavkada; qo'lda o'zgartirilsa ham saqlanadi (taqqoslash)
 
     @property
     def expected_amount(self) -> Decimal:
@@ -81,6 +90,16 @@ class RequestLine:
 class RequestSubmitted(DomainEvent):
     event_type: ClassVar[str] = "procurement.request_submitted"
     store_id: str
+    amount: str
+
+
+@dataclass(frozen=True, kw_only=True)
+class AutoRequestDrafted(DomainEvent):
+    """Avto-zayavka qoralamasi tayyor → bot: zakupshik / tashabbuskorga xabar."""
+
+    event_type: ClassVar[str] = "procurement.auto_request_drafted"
+    store_id: str
+    lines: int
     amount: str
 
 
@@ -150,6 +169,30 @@ class PurchaseRequest(AggregateRoot):
             needed_by=needed_by,
             initiator_id=initiator.user_id,
             comment=_clean(comment),
+        )
+
+    @classmethod
+    def create_auto(cls, *, number: str, store_id: UUID, initiator_id: UUID, needed_by: date, today: date) -> Self:
+        _check_needed_by(needed_by, today)
+        return cls(
+            id=new_id(),
+            number=number,
+            store_id=store_id,
+            type=RequestType.AUTO,
+            status=RequestStatus.DRAFT,
+            needed_by=needed_by,
+            initiator_id=initiator_id,
+        )
+
+    def add_auto_line(self, *, product_id: UUID, qty: Decimal, offer: OfferChoice, suggestion: Suggestion) -> None:
+        line = self.add_line(product_id=product_id, qty=qty, note=None, offer=offer)
+        line.suggestion = suggestion
+
+    def mark_drafted(self) -> None:
+        self.record(
+            AutoRequestDrafted(
+                aggregate_id=self.id, store_id=str(self.store_id), lines=len(self.lines), amount=str(self.total)
+            )
         )
 
     def revise(self, *, needed_by: date, comment: str | None, today: date) -> None:

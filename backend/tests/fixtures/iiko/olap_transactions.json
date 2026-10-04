@@ -1,0 +1,12 @@
+{"data": [
+ {"Product.Id": "dddddddd-0000-4000-8000-000000000001", "Account.Id": "bbbbbbbb-0000-4000-8000-000000000011", "DateTime.DateTyped": "2026-09-29", "TransactionType": "SESSION_WRITEOFF", "Amount.Out": 50},
+ {"Product.Id": "dddddddd-0000-4000-8000-000000000001", "Account.Id": "bbbbbbbb-0000-4000-8000-000000000011", "DateTime.DateTyped": "2026-09-30", "TransactionType": "SESSION_WRITEOFF", "Amount.Out": 6},
+ {"Product.Id": "dddddddd-0000-4000-8000-000000000001", "Account.Id": "bbbbbbbb-0000-4000-8000-000000000011", "DateTime.DateTyped": "2026-10-01", "TransactionType": "SESSION_WRITEOFF", "Amount.Out": 6},
+ {"Product.Id": "dddddddd-0000-4000-8000-000000000001", "Account.Id": "bbbbbbbb-0000-4000-8000-000000000011", "DateTime.DateTyped": "2026-10-01", "TransactionType": "TRANSFER", "Amount.Out": 2},
+ {"Product.Id": "dddddddd-0000-4000-8000-000000000001", "Account.Id": "bbbbbbbb-0000-4000-8000-000000000011", "DateTime.DateTyped": "2026-10-01", "TransactionType": "INVENTORY_CORRECTION", "Amount.Out": 5},
+ {"Product.Id": "dddddddd-0000-4000-8000-000000000001", "Account.Id": "bbbbbbbb-0000-4000-8000-000000000011", "DateTime.DateTyped": "2026-10-02", "TransactionType": "INVOICE", "Amount.Out": 0},
+ {"Product.Id": "dddddddd-0000-4000-8000-000000000001", "Account.Id": "bbbbbbbb-0000-4000-8000-000000000011", "DateTime.DateTyped": "2026-10-02", "TransactionType": "SESSION_WRITEOFF", "Amount.Out": 6},
+ {"Product.Id": "dddddddd-0000-4000-8000-000000000002", "Account.Id": "bbbbbbbb-0000-4000-8000-000000000012", "DateTime.DateTyped": "2026-10-02", "TransactionType": "WRITEOFF", "Amount.Out": 3},
+ {"Product.Id": "dddddddd-0000-4000-8000-000000000001", "Account.Id": "ffffffff-0000-4000-8000-000000000099", "DateTime.DateTyped": "2026-10-02", "TransactionType": "SESSION_WRITEOFF", "Amount.Out": 4},
+ {"Product.Id": null, "Account.Id": "0c3d7e0b-33fe-4140-85b7-a166d5405f8b", "DateTime.DateTyped": "2026-10-02", "TransactionType": "CUSTOM", "Amount.Out": 0}
+], "summary": []}

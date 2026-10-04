@@ -5,7 +5,7 @@ from decimal import Decimal
 from uuid import UUID
 
 from zakup.modules.catalog.application.queries import CatalogQueries, OfferQuote
-from zakup.modules.procurement.application.dto import CatalogLabels, OfferInfo, SupplierInfo
+from zakup.modules.procurement.application.dto import AutoCardInfo, CatalogLabels, OfferInfo, SupplierInfo
 
 
 def _offer(quote: OfferQuote) -> OfferInfo:
@@ -55,7 +55,21 @@ class CatalogAdapter:
             lead_time_days=terms.lead_time_days,
             phone=terms.phone,
             telegram=terms.telegram,
+            order_weekdays=terms.order_weekdays,
         )
+
+    async def auto_cards(self, store_id: UUID | None) -> list[AutoCardInfo]:
+        return [
+            AutoCardInfo(
+                product_id=card.product_id,
+                store_id=card.store_id,
+                safety_stock=card.safety_stock,
+                coverage_days=card.coverage_days,
+                shelf_life_days=card.shelf_life_days,
+                seasonal_factor=card.seasonal_factor,
+            )
+            for card in await self._catalog.auto_cards(store_id)
+        ]
 
     async def labels(
         self, *, products: Iterable[UUID] = (), suppliers: Iterable[UUID] = (), stores: Iterable[UUID] = ()

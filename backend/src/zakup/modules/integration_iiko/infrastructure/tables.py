@@ -36,7 +36,7 @@ sync_runs = Table(
     Column("created_at", DateTime(timezone=True), nullable=False, server_default=func.now()),
     Column("started_at", DateTime(timezone=True)),
     Column("finished_at", DateTime(timezone=True)),
-    CheckConstraint("kind IN ('references', 'purchase_prices')", name="kind"),
+    CheckConstraint("kind IN ('references', 'purchase_prices', 'stock', 'consumption')", name="kind"),
     CheckConstraint("status IN ('queued', 'running', 'done', 'failed')", name="status"),
     Index("ix_sync_runs_queued", "created_at", postgresql_where=text("status = 'queued'")),
     Index("ix_sync_runs_server_created", "server_code", "created_at"),

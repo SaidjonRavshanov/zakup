@@ -2,7 +2,9 @@
 
 import hashlib
 import secrets
-from datetime import datetime
+from collections.abc import Iterable
+from datetime import date, datetime
+from decimal import Decimal
 from typing import Any
 from uuid import UUID
 
@@ -25,6 +27,7 @@ from zakup.modules.procurement.domain.request import (
     RequestLine,
     RequestStatus,
     RequestType,
+    Suggestion,
 )
 from zakup.modules.procurement.infrastructure.tables import (
     approvals,
@@ -67,6 +70,16 @@ async def _bump(
         raise ConflictError(conflict)
 
 
+# Yo'lda: buyurtma yaratilgan / yuborilgan, hali qabul qilinmagan
+IN_TRANSIT = (
+    OrderStatus.CREATED,
+    OrderStatus.SENT,
+    OrderStatus.CONFIRMED,
+    OrderStatus.PARTIALLY_CONFIRMED,
+    OrderStatus.REAPPROVAL,
+)
+
+
 # ---------------------------------------------------------------- zayavka
 
 
@@ -96,6 +109,8 @@ def _request_lines(request: PurchaseRequest) -> list[dict[str, Any]]:
             "supplier_id": line.offer.supplier_id if line.offer else None,
             "price_per_base": line.offer.price_per_base if line.offer else None,
             "decision": line.decision.value,
+            "qty_suggested": line.suggestion.qty if line.suggestion else None,
+            "calc": line.suggestion.calc if line.suggestion else None,
         }
         for position, line in enumerate(request.lines)
     ]
@@ -104,6 +119,26 @@ def _request_lines(request: PurchaseRequest) -> list[dict[str, Any]]:
 class SqlRequestRepository:
     def __init__(self, session: AsyncSession) -> None:
         self._session = session
+
+    async def open_products(self, store_id: UUID) -> set[UUID]:
+        query = (
+            select(purchase_request_lines.c.product_id)
+            .join(purchase_requests, purchase_requests.c.id == purchase_request_lines.c.request_id)
+            .where(
+                purchase_requests.c.store_id == store_id,
+                purchase_requests.c.status.in_([RequestStatus.DRAFT.value, RequestStatus.PENDING_APPROVAL.value]),
+            )
+        )
+        return set((await self._session.scalars(query)).all())
+
+    async def has_auto_on(self, store_id: UUID, day: date) -> bool:
+        local_day = func.date(func.timezone("Asia/Tashkent", purchase_requests.c.created_at))
+        query = select(func.count()).where(
+            purchase_requests.c.store_id == store_id,
+            purchase_requests.c.type == RequestType.AUTO.value,
+            local_day == day,
+        )
+        return bool(await self._session.scalar(query))
 
     async def next_number(self) -> str:
         return f"Z-{await self._session.scalar(request_number_seq.next_value()):06d}"
@@ -141,6 +176,9 @@ class SqlRequestRepository:
                     note=line.note,
                     offer=OfferChoice(line.offer_id, line.supplier_id, line.price_per_base) if line.offer_id else None,
                     decision=LineDecision(line.decision),
+                    suggestion=Suggestion(line.qty_suggested, line.calc or {})
+                    if line.qty_suggested is not None
+                    else None,
                 )
                 for line in lines
             ],
@@ -246,6 +284,25 @@ def _order_lines(order: PurchaseOrder) -> list[dict[str, Any]]:
 class SqlOrderRepository:
     def __init__(self, session: AsyncSession) -> None:
         self._session = session
+
+    async def in_transit(self, store_id: UUID, product_ids: Iterable[UUID]) -> dict[UUID, Decimal]:
+        ids = list(product_ids)
+        if not ids:
+            return {}
+        packs = func.coalesce(purchase_order_lines.c.qty_confirmed, purchase_order_lines.c.qty_packs)
+        query = (
+            select(purchase_order_lines.c.product_id, func.sum(packs * purchase_order_lines.c.pack_factor))
+            .join(purchase_orders, purchase_orders.c.id == purchase_order_lines.c.order_id)
+            .where(
+                purchase_orders.c.store_id == store_id,
+                purchase_orders.c.status.in_([s.value for s in IN_TRANSIT]),
+                purchase_order_lines.c.product_id.in_(ids),
+                # javob "yo'q" (out_of_stock) — kelmaydi
+                func.coalesce(purchase_order_lines.c.qty_confirmed, 1) > 0,
+            )
+            .group_by(purchase_order_lines.c.product_id)
+        )
+        return {row[0]: row[1] for row in (await self._session.execute(query)).all()}
 
     async def next_number(self) -> str:
         return f"PO-{await self._session.scalar(order_number_seq.next_value()):06d}"

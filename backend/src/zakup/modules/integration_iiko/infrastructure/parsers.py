@@ -19,8 +19,10 @@ from zakup.modules.integration_iiko.domain.models import (
     IikoDepartment,
     IikoIncomingInvoice,
     IikoInvoiceItem,
+    IikoMovement,
     IikoProduct,
     IikoProductGroup,
+    IikoStockBalance,
     IikoStore,
     IikoSupplier,
     IikoUnit,
@@ -239,3 +241,40 @@ def parse_import_result(payload: bytes) -> ImportResult:
     valid = (root.findtext("valid") or "").strip().lower() == "true"
     error = (root.findtext("errorMessage") or "").strip() or None
     return ImportResult(valid=valid, document_number=_text(root, "documentNumber"), error=error)
+
+
+def parse_stock_balances(payload: bytes) -> list[IikoStockBalance]:
+    """`[{"store", "product", "amount", "sum"}]` — nol qoldiqlar tashlanadi."""
+    balances = []
+    for item in _json(payload):
+        store, product = _uuid(item.get("store")), _uuid(item.get("product"))
+        amount = _decimal(item.get("amount"))
+        if store and product and amount != 0:
+            balances.append(IikoStockBalance(store_id=store, product_id=product, amount=amount))
+    return balances
+
+
+def parse_olap_movements(payload: bytes) -> list[IikoMovement]:
+    """OLAP v2 javobi `{"data": [...], "summary": [...]}`: tovarsiz va chiqimsiz qatorlar tashlanadi."""
+    try:
+        data = json.loads(payload)
+    except ValueError as exc:
+        raise IikoResponseError("iiko.bad_json") from exc
+    if not isinstance(data, dict) or not isinstance(data.get("data"), list):
+        raise IikoResponseError("iiko.bad_json")
+    movements = []
+    for row in data["data"]:
+        product, store = _uuid(row.get("Product.Id")), _uuid(row.get("Account.Id"))
+        amount = _decimal(row.get("Amount.Out"))
+        if product is None or store is None or amount <= 0 or not row.get("DateTime.DateTyped"):
+            continue
+        movements.append(
+            IikoMovement(
+                store_id=store,
+                product_id=product,
+                day=date.fromisoformat(str(row["DateTime.DateTyped"])[:10]),
+                type=str(row.get("TransactionType") or ""),
+                amount_out=amount,
+            )
+        )
+    return movements

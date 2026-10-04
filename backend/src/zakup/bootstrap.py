@@ -102,14 +102,19 @@ from zakup.modules.integration_iiko.application.exports import (
     ExportScope,
     ExportSettings,
 )
-from zakup.modules.integration_iiko.application.runs import ListSyncRuns, RequestSync, SyncScope
+from zakup.modules.integration_iiko.application.planning import ImportConsumption, ImportStock
+from zakup.modules.integration_iiko.application.runs import ListSyncRuns, RequestSync, ScheduleDailySyncs, SyncScope
 from zakup.modules.integration_iiko.application.sync import ImportPurchasePrices, SyncReferences
 from zakup.modules.integration_iiko.infrastructure.catalog_adapter import CatalogSyncAdapter
 from zakup.modules.integration_iiko.infrastructure.client import HttpIikoGateway, PgAdvisoryLock
 from zakup.modules.integration_iiko.infrastructure.exports import BranchAdapter, ReceiptsAdapter, SqlExportQueue
+from zakup.modules.integration_iiko.infrastructure.planning_adapter import PlanningAdapter
 from zakup.modules.integration_iiko.infrastructure.repositories import SqlLinks, SqlSyncRunReader, SqlSyncRuns
+from zakup.modules.planning.application.facade import DemandQueries, PlanningIngest
+from zakup.modules.planning.infrastructure.repositories import SqlPlanningStore
 from zakup.modules.procurement.api.router import public_router as procurement_public_router
 from zakup.modules.procurement.api.router import router as procurement_router
+from zakup.modules.procurement.application.auto import GenerateAutoRequests
 from zakup.modules.procurement.application.orders import (
     ApproveOrderChanges,
     CancelOrder,
@@ -140,6 +145,7 @@ from zakup.modules.procurement.application.requests import (
 from zakup.modules.procurement.domain.approval import ApprovalPolicy, SupplierDebtPolicy
 from zakup.modules.procurement.domain.order import Tolerance
 from zakup.modules.procurement.infrastructure.catalog_adapter import CatalogAdapter
+from zakup.modules.procurement.infrastructure.planning_adapter import DemandAdapter
 from zakup.modules.procurement.infrastructure.readers import SqlOrderReader, SqlRequestReader
 from zakup.modules.procurement.infrastructure.repositories import (
     SqlOrderRepository,
@@ -168,6 +174,7 @@ from zakup.modules.receiving.infrastructure.repositories import (
 from zakup.platform.access_tokens import AccessTokenCodec, InvalidAccessTokenError
 from zakup.platform.di import Stub
 from zakup.platform.health import router as health_router
+from zakup.platform.scheduler import DailyJob, DailyScheduler
 from zakup.platform.uow import SqlAlchemyUnitOfWork
 from zakup.settings import Settings
 from zakup.shared_kernel.auth import Principal, Role
@@ -341,6 +348,10 @@ def build_iiko_gateway(settings: Settings, engine: AsyncEngine) -> HttpIikoGatew
     )
 
 
+def planning_sync(session: AsyncSession) -> PlanningAdapter:
+    return PlanningAdapter(PlanningIngest(SqlPlanningStore(session)))
+
+
 def iiko_scope_factory(session_factory: async_sessionmaker[AsyncSession]) -> Callable[[], Any]:
     """Worker: har qadam — alohida sessiya/tranzaksiya (runs + links + catalog bitta sessiyada)."""
 
@@ -363,6 +374,8 @@ def iiko_scope_factory(session_factory: async_sessionmaker[AsyncSession]) -> Cal
                 runs=SqlSyncRuns(session),
                 references=SyncReferences(links, catalog),
                 prices=ImportPurchasePrices(links, catalog),
+                stock=ImportStock(links, planning_sync(session)),
+                consumption=ImportConsumption(links, planning_sync(session)),
                 commit=session.commit,
             )
 
@@ -440,9 +453,20 @@ def _wire_procurement(overrides: Overrides, per_request: PerRequest, settings: S
         CancelOrder: lambda s: CancelOrder(uow(s), orders(s)),
         GetPublicOrder: lambda s: GetPublicOrder(SqlResponseTokens(s), SqlOrderReader(s), catalog_port(s)),
         SupplierRespond: lambda s: SupplierRespond(uow(s), orders(s), SqlResponseTokens(s), order_settings),
+        GenerateAutoRequests: lambda s: auto_requests(s, settings),
     }
     for use_case, build in providers.items():
         overrides[Stub(use_case)] = per_request(build)
+
+
+def auto_requests(session: AsyncSession, settings: Settings) -> GenerateAutoRequests:
+    return GenerateAutoRequests(
+        SqlAlchemyUnitOfWork(session),
+        SqlRequestRepository(session),
+        SqlOrderRepository(session),
+        catalog_port(session),
+        demand=DemandAdapter(DemandQueries(SqlPlanningStore(session), window_days=settings.demand_window_days)),
+    )
 
 
 # ---------------------------------------------------------------- receiving
@@ -561,4 +585,27 @@ def build_invoice_exporter(
         gateway,
         scope,
         ExportSettings(post_processed=settings.iiko_post_invoices, disputed_processed=settings.iiko_post_disputed),
+    )
+
+
+def build_daily_scheduler(
+    settings: Settings, gateway: HttpIikoGateway, session_factory: async_sessionmaker[AsyncSession]
+) -> DailyScheduler:
+    """Ertalab: iiko sinxroni (narx, sarf, qoldiq) → bir soatdan keyin avto-zayavka qoralamalari."""
+
+    async def daily_syncs() -> None:
+        async with session_factory() as session:
+            backfill = not await DemandQueries(SqlPlanningStore(session)).has_history()
+            await ScheduleDailySyncs(gateway, SqlSyncRuns(session), session.commit)(backfill=backfill)
+
+    async def auto() -> None:
+        async with session_factory() as session:
+            await auto_requests(session, settings)(None)
+
+    return DailyScheduler(
+        session_factory,
+        [
+            DailyJob("iiko_daily_sync", settings.daily_sync_hour, daily_syncs),
+            DailyJob("auto_requests", settings.auto_requests_hour, auto),
+        ],
     )

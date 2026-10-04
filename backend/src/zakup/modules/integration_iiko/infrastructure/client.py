@@ -8,8 +8,8 @@ import asyncio
 import hashlib
 from collections.abc import AsyncIterator, Callable
 from contextlib import AbstractAsyncContextManager, asynccontextmanager
-from datetime import date
-from typing import TypeVar
+from datetime import date, datetime
+from typing import Any, TypeVar
 
 import httpx
 import structlog
@@ -20,8 +20,10 @@ from zakup.modules.integration_iiko.application.ports import IikoSession, Server
 from zakup.modules.integration_iiko.domain.models import (
     IikoDepartment,
     IikoIncomingInvoice,
+    IikoMovement,
     IikoProduct,
     IikoProductGroup,
+    IikoStockBalance,
     IikoStore,
     IikoSupplier,
     IikoUnit,
@@ -76,9 +78,15 @@ class _HttpReader:
         self._key = key
 
     async def _get(self, path: str, parse: Callable[[bytes], T], **params: str) -> T:
+        return await self._read("GET", path, parse, params=params)
+
+    async def _read(
+        self, method: str, path: str, parse: Callable[[bytes], T], *, params: dict[str, str], json: Any = None
+    ) -> T:
+        """Faqat o'qish so'rovlari (OLAP POST ham o'qish) — xavfsiz qayta urinish."""
         for attempt in range(1, RETRIES + 1):
             try:
-                response = await self._http.get(path, params={**params, "key": self._key})
+                response = await self._http.request(method, path, params={**params, "key": self._key}, json=json)
                 if response.status_code < 500:  # noqa: PLR2004
                     break
             except httpx.TransportError as exc:
@@ -129,6 +137,32 @@ class _HttpReader:
             parsers.parse_incoming_invoices,
             **{"from": date_from.isoformat(), "to": date_to.isoformat()},
         )
+
+    async def stock_balances(self, at: datetime) -> list[IikoStockBalance]:
+        """`at` — server (Toshkent) vaqti bo'yicha, zonasiz."""
+        return await self._get(
+            "/v2/reports/balance/stores", parsers.parse_stock_balances, timestamp=at.strftime("%Y-%m-%dT%H:%M:%S")
+        )
+
+    async def movements(self, date_from: date, date_to: date) -> list[IikoMovement]:
+        """OLAP TRANSACTIONS, [date_from, date_to) — Sebzar'da 2026-10-03 namunasi bilan tekshirilgan so'rov shakli."""
+        body = {
+            "reportType": "TRANSACTIONS",
+            "buildSummary": "false",
+            "groupByRowFields": ["Product.Id", "Account.Id", "DateTime.DateTyped", "TransactionType"],
+            "aggregateFields": ["Amount.Out"],
+            "filters": {
+                "DateTime.DateTyped": {
+                    "filterType": "DateRange",
+                    "periodType": "CUSTOM",
+                    "from": date_from.isoformat(),
+                    "to": date_to.isoformat(),
+                    "includeLow": True,
+                    "includeHigh": False,
+                }
+            },
+        }
+        return await self._read("POST", "/v2/reports/olap", parsers.parse_olap_movements, params={}, json=body)
 
 
 class HttpIikoGateway:

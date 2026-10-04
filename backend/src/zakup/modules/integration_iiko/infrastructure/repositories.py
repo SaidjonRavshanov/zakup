@@ -31,6 +31,12 @@ class SqlLinks:
         result: UUID | None = await self._session.scalar(query)
         return result
 
+    async def mapping(self, server: str, kind: EntityKind) -> dict[UUID, UUID]:
+        query = select(links.c.iiko_id, links.c.local_id).where(
+            links.c.server_code == server, links.c.kind == kind.value
+        )
+        return {row.iiko_id: row.local_id for row in (await self._session.execute(query)).all()}
+
     async def iiko_ids(self, server: str, kind: EntityKind, local_id: UUID) -> list[tuple[UUID, dict[str, Any]]]:
         query = (
             select(links.c.iiko_id, links.c.attrs)

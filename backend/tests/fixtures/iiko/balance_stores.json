@@ -1,0 +1,7 @@
+[
+ {"store": "bbbbbbbb-0000-4000-8000-000000000011", "product": "dddddddd-0000-4000-8000-000000000001", "amount": 12.5, "sum": 131250},
+ {"store": "bbbbbbbb-0000-4000-8000-000000000012", "product": "dddddddd-0000-4000-8000-000000000002", "amount": -4, "sum": 0},
+ {"store": "bbbbbbbb-0000-4000-8000-000000000011", "product": "dddddddd-0000-4000-8000-000000000003", "amount": 5, "sum": 0},
+ {"store": "ffffffff-0000-4000-8000-000000000099", "product": "dddddddd-0000-4000-8000-000000000001", "amount": 3, "sum": 0},
+ {"store": "bbbbbbbb-0000-4000-8000-000000000011", "product": "dddddddd-0000-4000-8000-000000000004", "amount": 0, "sum": 0}
+]

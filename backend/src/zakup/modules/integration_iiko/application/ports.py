@@ -12,8 +12,10 @@ from zakup.modules.integration_iiko.domain.mapping import PaymentMethod
 from zakup.modules.integration_iiko.domain.models import (
     IikoDepartment,
     IikoIncomingInvoice,
+    IikoMovement,
     IikoProduct,
     IikoProductGroup,
+    IikoStockBalance,
     IikoStore,
     IikoSupplier,
     IikoUnit,
@@ -38,6 +40,11 @@ class IikoReader(Protocol):
     async def suppliers(self) -> list[IikoSupplier]: ...
 
     async def incoming_invoices(self, date_from: date, date_to: date) -> list[IikoIncomingInvoice]: ...
+
+    async def stock_balances(self, at: datetime) -> list[IikoStockBalance]: ...
+
+    async def movements(self, date_from: date, date_to: date) -> list[IikoMovement]:
+        """OLAP TRANSACTIONS: [date_from, date_to)."""
 
 
 class IikoInvoiceWriter(Protocol):
@@ -79,6 +86,9 @@ class Links(Protocol):
 
     async def local_id_by_key(self, kind: EntityKind, key: str) -> UUID | None:
         """Tabiiy kalit bo'yicha (yetkazuvchi: normallashtirilgan nom)."""
+
+    async def mapping(self, server: str, kind: EntityKind) -> dict[UUID, UUID]:
+        """Shu serverning barcha bog'lanishlari (iiko GUID → bizning ID) — katta hisobotlar uchun bitta so'rov."""
 
     async def iiko_ids(self, server: str, kind: EntityKind, local_id: UUID) -> list[tuple[UUID, dict[str, Any]]]:
         """Teskari: bizning ID → shu serverdagi iiko GUID'lar (yetkazuvchida — НАЛ/ПЕР kartochkalari)."""
@@ -145,6 +155,8 @@ class CatalogSync(Protocol):
 class SyncKind(StrEnum):
     REFERENCES = "references"  # bo'limlar, omborlar, guruhlar, tovarlar, yetkazuvchilar
     PURCHASE_PRICES = "purchase_prices"  # nakladnoylardan oxirgi xarid narxlari
+    STOCK = "stock"  # omborlardagi joriy qoldiq
+    CONSUMPTION = "consumption"  # kunlik sarf (OLAP TRANSACTIONS)
 
 
 class SyncStatus(StrEnum):
@@ -192,3 +204,28 @@ class SyncRunItem:
 
 class SyncRunReader(Protocol):
     async def recent(self, *, limit: int) -> list[SyncRunItem]: ...
+
+
+@dataclass(frozen=True, slots=True)
+class StockLine:
+    store_id: UUID
+    product_id: UUID
+    qty: Decimal
+
+
+@dataclass(frozen=True, slots=True)
+class ConsumptionLine:
+    store_id: UUID
+    product_id: UUID
+    day: date
+    qty: Decimal
+
+
+class PlanningSync(Protocol):
+    """planning modulining public interfeysi (PlanningIngest) — adapter orqali."""
+
+    async def replace_stock(self, store_ids: set[UUID], rows: list[StockLine], *, taken_at: datetime) -> None: ...
+
+    async def replace_consumption(
+        self, store_ids: set[UUID], rows: list[ConsumptionLine], *, date_from: date, date_to: date
+    ) -> None: ...

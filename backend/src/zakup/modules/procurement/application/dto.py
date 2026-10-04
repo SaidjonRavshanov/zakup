@@ -31,6 +31,26 @@ class SupplierInfo:
     lead_time_days: int
     phone: str | None
     telegram: str | None
+    order_weekdays: tuple[int, ...] = (1, 2, 3, 4, 5, 6, 7)  # ISO: 1 — dushanba
+
+
+@dataclass(frozen=True, slots=True)
+class AutoCardInfo:
+    product_id: UUID
+    store_id: UUID
+    safety_stock: Decimal
+    coverage_days: int
+    shelf_life_days: int | None
+    seasonal_factor: Decimal
+
+
+@dataclass(frozen=True, slots=True)
+class DemandSnapshot:
+    avg_daily: Decimal
+    days_observed: int
+    window_days: int
+    stock: Decimal | None
+    stock_at: datetime | None
 
 
 @dataclass(frozen=True, slots=True)
@@ -75,6 +95,8 @@ class RequestLineView:
     product_name: str = ""
     base_unit: str = "pcs"
     supplier_name: str | None = None
+    qty_suggested: Decimal | None = None
+    calc: dict[str, str | None] | None = None
 
 
 @dataclass(frozen=True, slots=True)

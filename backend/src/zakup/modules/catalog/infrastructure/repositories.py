@@ -346,3 +346,9 @@ class SqlPurchaseCardRepository(_TableRepository[PurchaseCard]):
         )
         row = (await self._session.execute(query)).mappings().first()
         return _card(row) if row else None
+
+    async def auto(self, store_id: UUID | None) -> list[PurchaseCard]:
+        query = select(purchase_cards).where(purchase_cards.c.mode == PurchaseMode.AUTO.value)
+        if store_id is not None:
+            query = query.where(purchase_cards.c.store_id == store_id)
+        return [_card(row) for row in (await self._session.execute(query)).mappings().all()]

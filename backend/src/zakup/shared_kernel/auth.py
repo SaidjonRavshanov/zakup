@@ -10,6 +10,9 @@ from uuid import UUID
 
 from zakup.shared_kernel.errors import PermissionDeniedError
 
+# Avtomatik hujjatlar muallifi (avto-zayavka): identity.users'da faol bo'lmagan yozuv (migratsiya 0008)
+SYSTEM_USER_ID = UUID("00000000-0000-7000-8000-000000000001")
+
 
 class Role(StrEnum):
     INITIATOR = "initiator"

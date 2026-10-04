@@ -6,13 +6,14 @@ keyin bazaga yoziladi. Litsenziya bitta sessiyaga ruxsat beradi — boshqa tizim
 
 from collections.abc import Awaitable, Callable
 from contextlib import AbstractAsyncContextManager
-from dataclasses import dataclass
-from datetime import date, timedelta
+from dataclasses import dataclass, field
+from datetime import date, datetime, timedelta
 from typing import Any, Protocol
 from uuid import UUID
 
 import structlog
 
+from zakup.modules.integration_iiko.application.planning import ImportConsumption, ImportStock
 from zakup.modules.integration_iiko.application.ports import (
     IikoGateway,
     IikoReader,
@@ -27,8 +28,10 @@ from zakup.modules.integration_iiko.application.sync import ImportPurchasePrices
 from zakup.modules.integration_iiko.domain.models import (
     IikoDepartment,
     IikoIncomingInvoice,
+    IikoMovement,
     IikoProduct,
     IikoProductGroup,
+    IikoStockBalance,
     IikoStore,
     IikoSupplier,
     IikoUnit,
@@ -38,8 +41,13 @@ from zakup.shared_kernel.clock import Clock, business_today, utc_now
 from zakup.shared_kernel.errors import ConflictError, DomainError, NotFoundError
 
 log = structlog.get_logger()
+TASHKENT_OFFSET = timedelta(hours=5)  # UTC+5, DST yo'q
 DEFAULT_PRICE_DAYS = 30
 MAX_PRICE_DAYS = 120
+DEFAULT_CONSUMPTION_DAYS = 3  # kundalik: oxirgi kunlar qayta olinadi (iiko'da kechikkan tuzatishlar)
+MAX_CONSUMPTION_DAYS = 60
+BACKFILL_CONSUMPTION_DAYS = 28  # birinchi marta — o'rtacha sarf oynasi
+CONSUMPTION_CHUNK_DAYS = 7  # OLAP javobi katta: haftalik bo'laklar (Sebzar: ~30 ming qator / hafta)
 
 
 class InvalidSyncRequestError(DomainError):
@@ -57,9 +65,13 @@ class Snapshot:
     products_: list[IikoProduct]
     suppliers_: list[IikoSupplier]
     invoices_: list[IikoIncomingInvoice]
+    stock_: list[IikoStockBalance] = field(default_factory=list)
+    movements_: list[IikoMovement] = field(default_factory=list)
 
     @classmethod
-    async def fetch(cls, reader: IikoReader, kind: SyncKind, period: tuple[date, date] | None) -> "Snapshot":
+    async def fetch(
+        cls, reader: IikoReader, kind: SyncKind, period: tuple[date, date] | None, at: datetime
+    ) -> "Snapshot":
         if kind is SyncKind.REFERENCES:
             return cls(
                 await reader.departments(),
@@ -70,7 +82,17 @@ class Snapshot:
                 await reader.suppliers(),
                 [],
             )
+        if kind is SyncKind.STOCK:
+            return cls([], [], [], [], [], [], [], stock_=await reader.stock_balances(at))
         assert period is not None
+        if kind is SyncKind.CONSUMPTION:
+            movements: list[IikoMovement] = []
+            start = period[0]
+            while start < period[1]:
+                end = min(start + timedelta(days=CONSUMPTION_CHUNK_DAYS), period[1])
+                movements.extend(await reader.movements(start, end))
+                start = end
+            return cls([], [], [], [], [], [], [], movements_=movements)
         return cls([], [], [], [], [], [], await reader.incoming_invoices(*period))
 
     async def departments(self) -> list[IikoDepartment]:
@@ -94,6 +116,12 @@ class Snapshot:
     async def incoming_invoices(self, date_from: date, date_to: date) -> list[IikoIncomingInvoice]:
         return [i for i in self.invoices_ if date_from <= i.incoming_date <= date_to]
 
+    async def stock_balances(self, at: datetime) -> list[IikoStockBalance]:
+        return self.stock_
+
+    async def movements(self, date_from: date, date_to: date) -> list[IikoMovement]:
+        return [m for m in self.movements_ if date_from <= m.day < date_to]
+
 
 class RequestSync:
     def __init__(self, gateway: IikoGateway, runs: SyncRuns, commit: Callable[[], Awaitable[None]]) -> None:
@@ -106,16 +134,52 @@ class RequestSync:
         if server_code not in {s.code for s in self._gateway.servers()}:
             raise NotFoundError("iiko.server_not_found")
         params: dict[str, Any] = {}
-        if kind is SyncKind.PURCHASE_PRICES:
-            days = days or DEFAULT_PRICE_DAYS
-            if not 1 <= days <= MAX_PRICE_DAYS:
-                raise InvalidSyncRequestError("iiko.days_range", max=MAX_PRICE_DAYS)
+        if kind in DAY_LIMITS:
+            default, maximum = DAY_LIMITS[kind]
+            days = days or default
+            if not 1 <= days <= maximum:
+                raise InvalidSyncRequestError("iiko.days_range", max=maximum)
             params["days"] = days
         if await self._runs.has_pending(server_code, kind):
             raise ConflictError("iiko.sync_pending")
         run_id = await self._runs.enqueue(server_code=server_code, kind=kind, params=params, requested_by=actor.user_id)
         await self._commit()
         return run_id
+
+
+DAY_LIMITS = {
+    SyncKind.PURCHASE_PRICES: (DEFAULT_PRICE_DAYS, MAX_PRICE_DAYS),
+    SyncKind.CONSUMPTION: (DEFAULT_CONSUMPTION_DAYS, MAX_CONSUMPTION_DAYS),
+}
+
+
+class ScheduleDailySyncs:
+    """Har kuni ertalab (worker): har bir serverga narxlar + sarf + qoldiq — avto-zayavkadan oldin.
+
+    Sarf tarixi hali yo'q bo'lsa — birinchi marta 28 kun (o'rtacha sarf oynasi) olinadi.
+    """
+
+    def __init__(self, gateway: IikoGateway, runs: SyncRuns, commit: Callable[[], Awaitable[None]]) -> None:
+        self._gateway = gateway
+        self._runs = runs
+        self._commit = commit
+
+    async def __call__(self, *, backfill: bool) -> int:
+        queued = 0
+        consumption_days = BACKFILL_CONSUMPTION_DAYS if backfill else DEFAULT_CONSUMPTION_DAYS
+        plan: tuple[tuple[SyncKind, dict[str, Any]], ...] = (
+            (SyncKind.PURCHASE_PRICES, {"days": 2}),
+            (SyncKind.CONSUMPTION, {"days": consumption_days}),
+            (SyncKind.STOCK, {}),
+        )
+        for server in self._gateway.servers():
+            for kind, params in plan:
+                if await self._runs.has_pending(server.code, kind):
+                    continue
+                await self._runs.enqueue(server_code=server.code, kind=kind, params=params, requested_by=None)
+                queued += 1
+        await self._commit()
+        return queued
 
 
 @dataclass(frozen=True, slots=True)
@@ -125,6 +189,8 @@ class SyncScope:
     runs: SyncRuns
     references: SyncReferences
     prices: ImportPurchasePrices
+    stock: ImportStock
+    consumption: ImportConsumption
     commit: Callable[[], Awaitable[None]]
 
 
@@ -159,15 +225,25 @@ class RunNextSync:
         return True
 
     async def _execute(self, run: SyncRun) -> dict[str, int]:
+        now = self._clock()
+        today = business_today(self._clock)
         period = None
         if run.kind is SyncKind.PURCHASE_PRICES:
-            today = business_today(self._clock)
             period = (today - timedelta(days=int(run.params.get("days", DEFAULT_PRICE_DAYS))), today)
+        elif run.kind is SyncKind.CONSUMPTION:
+            # [from, today): bugungi to'liq bo'lmagan kun olinmaydi
+            period = (today - timedelta(days=int(run.params.get("days", DEFAULT_CONSUMPTION_DAYS))), today)
+        server_now = (now + TASHKENT_OFFSET).replace(tzinfo=None)  # iiko serveri vaqti — balance timestamp
         async with self._gateway.session(run.server_code) as reader:
-            snapshot = await Snapshot.fetch(reader, run.kind, period)
+            snapshot = await Snapshot.fetch(reader, run.kind, period, server_now)
         async with self._scope() as scope:
             if run.kind is SyncKind.REFERENCES:
                 stats = await scope.references(run.server_code, snapshot)
+            elif run.kind is SyncKind.STOCK:
+                stats = await scope.stock(run.server_code, snapshot, now)
+            elif run.kind is SyncKind.CONSUMPTION:
+                assert period is not None
+                stats = await scope.consumption(run.server_code, snapshot, *period)
             else:
                 assert period is not None
                 stats = await scope.prices(run.server_code, snapshot, *period)

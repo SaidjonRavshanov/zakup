@@ -7,6 +7,7 @@ Sessiyalar kuzatiladi: bir vaqtdagi maksimal soni va yopilmay qolganlari — "se
 """
 
 import hashlib
+import json
 import os
 import secrets
 import uuid
@@ -27,6 +28,7 @@ _FILES = {
     "/resto/api/corporation/departments": ("departments.xml", "application/xml"),
     "/resto/api/suppliers": ("suppliers.xml", "application/xml"),
     "/resto/api/documents/export/incomingInvoice": ("incoming_invoices.xml", "application/xml"),
+    "/resto/api/v2/reports/balance/stores": ("balance_stores.json", "application/json"),
 }
 
 
@@ -90,6 +92,18 @@ def create_fake_iiko(data_dir: Path = FIXTURES, state: FakeIikoState | None = No
             f"<documentNumber>{number}</documentNumber><errorMessage/></documentValidationResult>"
         )
         return Response(xml, media_type="application/xml")
+
+    @app.post("/resto/api/v2/reports/olap")
+    async def olap(key: str, request: Request) -> Response:
+        """OLAP TRANSACTIONS: fayldagi qatorlar so'rovdagi sana oralig'i bo'yicha filtrlanadi ([from, to))."""
+        if key not in state.active:
+            raise HTTPException(401, "Token is expired or invalid")
+        state.requests.append("/resto/api/v2/reports/olap")
+        body = await request.json()
+        period = body["filters"]["DateTime.DateTyped"]
+        data = json.loads((data_dir / "olap_transactions.json").read_bytes())
+        rows = [r for r in data["data"] if period["from"] <= r["DateTime.DateTyped"][:10] < period["to"]]
+        return Response(json.dumps({"data": rows, "summary": []}), media_type="application/json")
 
     for path, (filename, media_type) in _FILES.items():
         app.add_api_route(path, make_handler(filename, media_type, path), methods=["GET"])

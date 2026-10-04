@@ -93,6 +93,8 @@ class RequestLineOut(Model):
     price_per_base: Decimal | None
     amount: Decimal
     decision: LineDecision
+    qty_suggested: Decimal | None = None
+    calc: dict[str, str | None] | None = None
 
 
 class ApprovalOut(Model):

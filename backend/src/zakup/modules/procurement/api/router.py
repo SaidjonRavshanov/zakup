@@ -4,6 +4,7 @@ from typing import Annotated, Any
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Query, status
+from pydantic import BaseModel
 
 from zakup.modules.procurement.api.schemas import (
     AddLineIn,
@@ -26,6 +27,7 @@ from zakup.modules.procurement.api.schemas import (
     SentOrderOut,
     StatusOut,
 )
+from zakup.modules.procurement.application.auto import GenerateAutoRequests
 from zakup.modules.procurement.application.orders import (
     ApproveOrderChanges,
     CancelOrder,
@@ -248,3 +250,25 @@ async def public_response(
     token: str, body: OrderResponseIn, use_case: Annotated[SupplierRespond, use(SupplierRespond)]
 ) -> StatusOut:
     return StatusOut(status=await use_case(token, body.to_domain()))
+
+
+class AutoRequestsIn(BaseModel):
+    store_id: UUID | None = None
+    force: bool = False  # bugun yaratilgan bo'lsa ham qayta hisoblash
+
+
+class AutoRequestsOut(BaseModel):
+    request_ids: list[UUID]
+    lines: int
+    skipped: dict[str, int]
+
+
+@router.post("/auto-requests")
+async def generate_auto_requests(
+    body: AutoRequestsIn,
+    actor: CurrentPrincipal,
+    use_case: Annotated[GenerateAutoRequests, use(GenerateAutoRequests)],
+) -> AutoRequestsOut:
+    """Avto-zayavka qoralamalari (har kuni ertalab worker ham ishga tushiradi)."""
+    result = await use_case(actor, store_id=body.store_id, force=body.force)
+    return AutoRequestsOut(request_ids=result.request_ids, lines=result.lines, skipped=dict(result.skipped))

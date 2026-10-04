@@ -23,6 +23,7 @@ from zakup.modules.integration_iiko.infrastructure.client import HttpIikoGateway
 from zakup.platform.db import create_session_factory
 from zakup.platform.outbox_relay import OutboxRelay
 from zakup.settings import IikoServerSettings, Settings
+from zakup.shared_kernel.auth import SYSTEM_USER_ID
 
 TEST_DB_URL = os.environ.get("ZAKUP_TEST_DATABASE_URL", "postgresql+asyncpg://postgres@127.0.0.1:5432/zakup_test")
 BACKEND_DIR = Path(__file__).resolve().parents[2]
@@ -102,8 +103,16 @@ async def _clean_tables() -> AsyncIterator[None]:
                 "TRUNCATE catalog.suppliers, catalog.stores, catalog.products, catalog.product_categories,"
                 " catalog.branches, platform.outbox, identity.users, iiko.links, iiko.sync_runs,"
                 " procurement.purchase_requests, procurement.purchase_orders, receiving.attachments,"
-                " iiko.invoice_exports CASCADE"
+                " iiko.invoice_exports, planning.stock_current, planning.consumption_daily, platform.daily_jobs CASCADE"
             )
+        )
+        # Tizim foydalanuvchisi migratsiyada yaratiladi — TRUNCATE'dan keyin qaytariladi
+        await conn.execute(
+            text(
+                "INSERT INTO identity.users (id, telegram_id, full_name, locale, is_active)"
+                " VALUES (:id, 0, 'Tizim', 'uz', false)"
+            ),
+            {"id": SYSTEM_USER_ID},
         )
     await engine.dispose()
 

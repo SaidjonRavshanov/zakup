@@ -10,7 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from zakup.modules.identity.application.dto import UserProfile, UserStatus
 from zakup.modules.identity.domain.user import InvalidUserError, User
 from zakup.modules.identity.infrastructure.tables import user_roles, users
-from zakup.shared_kernel.auth import Role, RoleGrant
+from zakup.shared_kernel.auth import SYSTEM_USER_ID, Role, RoleGrant
 from zakup.shared_kernel.errors import ConflictError
 
 
@@ -140,7 +140,11 @@ class SqlUserReader:
 
     async def list(self, *, status: UserStatus | None, search: str | None, limit: int) -> list[UserProfile]:
         # Faollashtirishni kutayotganlar birinchi — admin ularni darhol ko'rsin
-        query = select(*_PROFILE_COLUMNS).order_by(users.c.is_active, users.c.full_name, users.c.id)
+        query = (
+            select(*_PROFILE_COLUMNS)
+            .where(users.c.id != SYSTEM_USER_ID)  # avtomatik hujjatlar muallifi — xodim emas
+            .order_by(users.c.is_active, users.c.full_name, users.c.id)
+        )
         if status is not None:
             query = query.where(users.c.is_active.is_(status == "active"))
         if search:

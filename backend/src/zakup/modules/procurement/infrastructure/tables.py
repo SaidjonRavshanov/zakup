@@ -15,7 +15,7 @@ from sqlalchemy import (
     Text,
     func,
 )
-from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.dialects.postgresql import JSONB, UUID
 
 from zakup.platform.db import metadata
 
@@ -86,6 +86,9 @@ purchase_request_lines = Table(
     Column("supplier_id", UUID(as_uuid=True), ForeignKey("catalog.suppliers.id")),
     Column("price_per_base", Numeric(18, 4)),
     Column("decision", Text, nullable=False, server_default="pending"),
+    # Avto-zayavka: hisoblangan miqdor va "nega shuncha" (WORKFLOW B3)
+    Column("qty_suggested", Numeric(18, 4)),
+    Column("calc", JSONB),
     CheckConstraint("qty > 0", name="qty"),
     CheckConstraint("decision IN ('pending', 'approved', 'rejected')", name="decision"),
     Index("ix_purchase_request_lines_request", "request_id", "position"),

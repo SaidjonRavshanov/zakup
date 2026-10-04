@@ -106,6 +106,8 @@ class SqlRequestReader:
                     if line.price_per_base is not None
                     else Decimal(0),
                     decision=LineDecision(line.decision),
+                    qty_suggested=line.qty_suggested,
+                    calc=line.calc,
                 )
                 for line in lines
             ),

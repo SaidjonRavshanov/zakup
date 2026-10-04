@@ -1,13 +1,15 @@
 """procurement port'lari (DIP). catalog bilan — faqat CatalogPort orqali (ARCHITECTURE §3.1)."""
 
 from collections.abc import Iterable
-from datetime import datetime
+from datetime import date, datetime
 from decimal import Decimal
 from typing import Protocol
 from uuid import UUID
 
 from zakup.modules.procurement.application.dto import (
+    AutoCardInfo,
     CatalogLabels,
+    DemandSnapshot,
     OfferInfo,
     OrderDetail,
     OrderListItem,
@@ -22,6 +24,12 @@ from zakup.modules.procurement.domain.request import PurchaseRequest, RequestSta
 class RequestRepository(Protocol):
     async def next_number(self) -> str: ...
 
+    async def open_products(self, store_id: UUID) -> set[UUID]:
+        """Ochiq (qoralama / tasdiqlashda) zayavkalardagi tovarlar — avto-zayavka ularni takrorlamaydi."""
+
+    async def has_auto_on(self, store_id: UUID, day: date) -> bool:
+        """Shu kuni ombor uchun avto-zayavka yaratilganmi (Toshkent sanasi)."""
+
     async def get(self, request_id: UUID) -> PurchaseRequest | None: ...
 
     async def add(self, request: PurchaseRequest) -> None: ...
@@ -32,6 +40,9 @@ class RequestRepository(Protocol):
 
 class OrderRepository(Protocol):
     async def next_number(self) -> str: ...
+
+    async def in_transit(self, store_id: UUID, product_ids: Iterable[UUID]) -> dict[UUID, Decimal]:
+        """Yo'lda: yuborilgan / tasdiqlangan, hali qabul qilinmagan buyurtmalar (bazaviy birlikda)."""
 
     async def get(self, order_id: UUID) -> PurchaseOrder | None: ...
 
@@ -62,9 +73,19 @@ class CatalogPort(Protocol):
 
     async def supplier(self, supplier_id: UUID) -> SupplierInfo | None: ...
 
+    async def auto_cards(self, store_id: UUID | None) -> list[AutoCardInfo]: ...
+
     async def labels(
         self, *, products: Iterable[UUID] = (), suppliers: Iterable[UUID] = (), stores: Iterable[UUID] = ()
     ) -> CatalogLabels: ...
+
+
+class DemandPort(Protocol):
+    """planning modulining public interfeysi (DemandQueries) — adapter orqali."""
+
+    async def stats(
+        self, store_id: UUID, product_ids: Iterable[UUID], *, today: date
+    ) -> dict[UUID, DemandSnapshot]: ...
 
 
 class SupplierCreditPort(Protocol):

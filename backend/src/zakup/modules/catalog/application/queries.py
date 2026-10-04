@@ -51,9 +51,22 @@ class SupplierTerms:
     lead_time_days: int
     phone: str | None
     telegram: str | None
+    order_weekdays: tuple[int, ...] = (1, 2, 3, 4, 5, 6, 7)  # ISO: 1 — dushanba
     payment_terms: str = "on_delivery"
     deferral_days: int = 0  # faqat payment_terms=deferred bo'lsa
     credit_limit: Decimal = Decimal(0)  # 0 — limit yo'q
+
+
+@dataclass(frozen=True, slots=True)
+class AutoCard:
+    """Avto-zakupdagi tovar x ombor normativlari (WORKFLOW B3)."""
+
+    product_id: UUID
+    store_id: UUID
+    safety_stock: Decimal
+    coverage_days: int
+    shelf_life_days: int | None
+    seasonal_factor: Decimal
 
 
 class CatalogQueries:
@@ -97,6 +110,19 @@ class CatalogQueries:
                     return min(preferred, key=lambda q: q.price_per_base)
         return min(offers, key=lambda q: q.price_per_base)
 
+    async def auto_cards(self, store_id: UUID | None = None) -> list[AutoCard]:
+        return [
+            AutoCard(
+                product_id=card.product_id,
+                store_id=card.store_id,
+                safety_stock=card.norms.safety_stock,
+                coverage_days=card.norms.coverage_days,
+                shelf_life_days=card.norms.shelf_life_days,
+                seasonal_factor=card.norms.seasonal_factor,
+            )
+            for card in await self._cards.auto(store_id)
+        ]
+
     async def pack_quantity(self, offer_id: UUID, base_qty: Decimal) -> PackQuantity | None:
         offer = await self._offers.get(offer_id)
         if offer is None:
@@ -131,6 +157,7 @@ class CatalogQueries:
             lead_time_days=supplier.schedule.lead_time_days,
             phone=supplier.contacts.phone,
             telegram=supplier.contacts.telegram,
+            order_weekdays=tuple(sorted(supplier.schedule.order_weekdays)),
             payment_terms=supplier.payment_terms.value,
             deferral_days=supplier.deferral_days if supplier.payment_terms is PaymentTerms.DEFERRED else 0,
             credit_limit=supplier.credit_limit.amount,

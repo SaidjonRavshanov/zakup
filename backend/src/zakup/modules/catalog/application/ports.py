@@ -63,6 +63,9 @@ class PriceHistory(Protocol):
 class PurchaseCardRepository(Repository[PurchaseCard], Protocol):
     async def find(self, *, product_id: UUID, store_id: UUID) -> PurchaseCard | None: ...
 
+    async def auto(self, store_id: UUID | None) -> list[PurchaseCard]:
+        """Avto-zakupdagi kartochkalar (mode=auto); store_id=None — barcha omborlar."""
+
 
 class SupplierReader(Protocol):
     """O'qish tomoni (CQRS-lite): to'g'ridan-to'g'ri DTO, aggregate yaratilmaydi."""

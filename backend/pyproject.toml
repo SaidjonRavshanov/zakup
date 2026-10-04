@@ -96,6 +96,7 @@ containers = [
     "zakup.modules.finance",
     "zakup.modules.identity",
     "zakup.modules.integration_iiko",
+    "zakup.modules.planning",
     "zakup.modules.procurement",
     "zakup.modules.receiving",
 ]
@@ -153,3 +154,22 @@ name = "Hech bir modul finance'ni import qilmaydi (procurement'ga facade bootstr
 type = "forbidden"
 source_modules = ["zakup.modules.procurement", "zakup.modules.receiving", "zakup.modules.integration_iiko"]
 forbidden_modules = ["zakup.modules.finance"]
+
+[[tool.importlinter.contracts]]
+name = "planning faqat o'z ma'lumotini biladi; boshqalar uni faqat application facade orqali chaqiradi"
+type = "forbidden"
+source_modules = ["zakup.modules.planning"]
+forbidden_modules = [
+    "zakup.modules.catalog",
+    "zakup.modules.finance",
+    "zakup.modules.integration_iiko",
+    "zakup.modules.procurement",
+    "zakup.modules.receiving",
+]
+
+[[tool.importlinter.contracts]]
+name = "planning'ning ichki qatlamlari boshqa modullarga yopiq"
+type = "forbidden"
+source_modules = ["zakup.modules.integration_iiko", "zakup.modules.procurement"]
+forbidden_modules = ["zakup.modules.planning.domain", "zakup.modules.planning.infrastructure"]
+allow_indirect_imports = true
