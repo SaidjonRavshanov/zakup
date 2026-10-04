@@ -106,6 +106,12 @@ const financeRoutes = [
   }),
 ]
 
+const analyticsRoute = createRoute({
+  getParentRoute: () => shellRoute,
+  path: '/analytics',
+  component: lazyRouteComponent(() => import('@/pages/analytics/AnalyticsPage')),
+})
+
 const iikoRoute = createRoute({
   getParentRoute: () => shellRoute,
   path: '/admin/iiko',
@@ -173,7 +179,7 @@ const devUiRoute = createRoute({
 })
 
 const routeTree = rootRoute.addChildren([
-  shellRoute.addChildren([dashboardRoute, ordersRoute, receivingRoute, receiveOrderRoute, profileRoute, usersRoute, userEditRoute, iikoRoute, receiptRoute, ...financeRoutes, ...requestRoutes, catalogRoute, ...catalogRoutes, devUiRoute]),
+  shellRoute.addChildren([dashboardRoute, ordersRoute, receivingRoute, receiveOrderRoute, profileRoute, usersRoute, userEditRoute, iikoRoute, receiptRoute, ...financeRoutes, analyticsRoute, ...requestRoutes, catalogRoute, ...catalogRoutes, devUiRoute]),
 ])
 
 export const router = createRouter({

@@ -1,11 +1,11 @@
 import { useQuery } from '@tanstack/react-query'
 import { Outlet } from '@tanstack/react-router'
-import { BookOpen, ClipboardList, FilePen, LayoutGrid, PackageCheck, RefreshCw, UserRound, UsersRound, Wallet } from 'lucide-react'
+import { BookOpen, ChartColumn, ClipboardList, FilePen, LayoutGrid, PackageCheck, RefreshCw, UserRound, UsersRound, Wallet } from 'lucide-react'
 import { meQuery, useActiveRole, type Role } from '@/entities/user'
 import { useI18n, type Messages } from '@/shared/i18n'
 import { BottomNav, type NavItem } from '@/shared/ui'
 
-type NavKey = 'home' | 'requests' | 'orders' | 'catalog' | 'receiving' | 'finance' | 'users' | 'iiko' | 'profile'
+type NavKey = 'home' | 'requests' | 'orders' | 'catalog' | 'receiving' | 'finance' | 'analytics' | 'users' | 'iiko' | 'profile'
 
 const ITEMS: Record<NavKey, Omit<NavItem, 'label'>> = {
   home: { to: '/', icon: LayoutGrid },
@@ -14,6 +14,7 @@ const ITEMS: Record<NavKey, Omit<NavItem, 'label'>> = {
   catalog: { to: '/catalog', icon: BookOpen },
   receiving: { to: '/receiving', icon: PackageCheck },
   finance: { to: '/finance', icon: Wallet },
+  analytics: { to: '/analytics', icon: ChartColumn },
   users: { to: '/admin/users', icon: UsersRound },
   iiko: { to: '/admin/iiko', icon: RefreshCw },
   profile: { to: '/profile', icon: UserRound },
@@ -25,11 +26,11 @@ const ITEMS: Record<NavKey, Omit<NavItem, 'label'>> = {
  */
 const NAV_BY_ROLE: Record<Role, ReadonlyArray<NavKey>> = {
   initiator: ['home', 'requests', 'catalog', 'profile'],
-  buyer: ['home', 'requests', 'orders', 'catalog', 'profile'],
-  approver: ['home', 'requests', 'orders', 'finance', 'profile'],
+  buyer: ['home', 'requests', 'orders', 'catalog', 'analytics', 'profile'],
+  approver: ['home', 'requests', 'orders', 'finance', 'analytics', 'profile'],
   storekeeper: ['home', 'receiving', 'profile'],
   accountant: ['home', 'finance', 'orders', 'catalog', 'profile'],
-  auditor: ['home', 'requests', 'orders', 'receiving', 'finance', 'profile'],
+  auditor: ['home', 'orders', 'receiving', 'finance', 'analytics', 'profile'],
   // 6 tadan ortig'i telefonda sig'maydi: iiko sinxroni — profil sahifasidan
   admin: ['home', 'requests', 'finance', 'catalog', 'users', 'profile'],
 }
