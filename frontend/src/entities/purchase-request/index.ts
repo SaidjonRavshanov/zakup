@@ -38,6 +38,37 @@ export interface RequestLine {
   price_per_base: DecimalString | null
   amount: DecimalString
   decision: LineDecision
+  qty_suggested: DecimalString | null
+  calc: AutoCalc | null
+}
+
+/** Avto-zayavka: "nega shuncha" (backend `calc`, qiymatlar — matn ko'rinishidagi sonlar). */
+export interface AutoCalc {
+  avg_daily: string
+  window_days: string
+  days_observed: string
+  stock: string | null
+  stock_at: string | null
+  in_transit: string
+  lead_days: string
+  coverage_days: string
+  safety_stock: string
+  seasonal_factor: string
+  target: string
+  reorder_point: string
+  need: string
+  packs: string
+  pack_unit: string | null
+  pack_factor: string
+  trigger: 'reorder_point' | 'order_day' | null
+}
+
+export type AutoSkipReason = 'already_today' | 'in_open_request' | 'no_offer' | 'no_history' | 'enough_stock'
+
+export interface AutoRunResult {
+  request_ids: string[]
+  lines: number
+  skipped: Partial<Record<AutoSkipReason, number>>
 }
 
 export interface Approval {
@@ -105,6 +136,8 @@ export const requestsApi = {
     apiRequest<void>(base(id), { method: 'PATCH', body }),
   addLine: (id: string, body: { product_id: string; qty: string; note: string | null }) =>
     apiRequest<{ id: string }>(`${base(id)}/lines`, { method: 'POST', body }),
+  runAuto: (body: { store_id?: string; force?: boolean } = {}) =>
+    apiRequest<AutoRunResult>('/procurement/auto-requests', { method: 'POST', body }),
   changeLine: (id: string, lineId: string, body: { qty: string; note: string | null }) =>
     apiRequest<void>(`${base(id)}/lines/${lineId}`, { method: 'PATCH', body }),
   removeLine: (id: string, lineId: string) => apiRequest<void>(`${base(id)}/lines/${lineId}`, { method: 'DELETE' }),
@@ -117,3 +150,5 @@ export const requestsApi = {
   reject: (id: string, comment: string) => apiRequest<void>(`${base(id)}/reject`, { method: 'POST', body: { comment } }),
   cancel: (id: string) => apiRequest<void>(`${base(id)}/cancel`, { method: 'POST' }),
 }
+
+export { WhyQuantity } from './WhyQuantity'

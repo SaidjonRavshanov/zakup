@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { DatabaseZap, ReceiptText } from 'lucide-react'
+import { Boxes, DatabaseZap, ReceiptText, TrendingDown, type LucideIcon } from 'lucide-react'
 import { useEffect } from 'react'
 import { iikoSyncQuery, requestIikoSync, type SyncKind, type SyncRun, type SyncStatus } from '@/entities/iiko'
 import { CATALOG_KEY } from '@/entities/catalog'
@@ -12,7 +12,25 @@ import { Card, EmptyState, FormError, LaserButton, MonoLabel, PageHeader, Skelet
 const STATUS_TONE: Record<SyncStatus, Tone> = { queued: 'neutral', running: 'info', done: 'accent', failed: 'danger' }
 
 /** Natija: eng muhim sonlar (to'liq ro'yxat — backend logida). */
-const STAT_KEYS = ['products_new', 'products', 'suppliers_new', 'suppliers', 'stores', 'prices_recorded', 'invoices'] as const
+const STAT_KEYS = [
+  'products_new',
+  'products',
+  'suppliers_new',
+  'suppliers',
+  'stores',
+  'prices_recorded',
+  'invoices',
+  'balances',
+  'days_products',
+] as const
+
+/** Har ertalab worker o'zi ham ishga tushiradi; tugmalar — qo'lda yangilash uchun. */
+const ACTIONS: ReadonlyArray<{ kind: SyncKind; icon: LucideIcon; days?: number }> = [
+  { kind: 'references', icon: DatabaseZap },
+  { kind: 'purchase_prices', icon: ReceiptText, days: 30 },
+  { kind: 'stock', icon: Boxes },
+  { kind: 'consumption', icon: TrendingDown, days: 28 },
+]
 
 export default function IikoSyncPage() {
   const { t, fmt } = useI18n()
@@ -52,37 +70,31 @@ export default function IikoSyncPage() {
 
       <div className="flex flex-col gap-3">
         {data.servers.map((server, i) => {
-          const refs = latest(server.code, 'references')
-          const prices = latest(server.code, 'purchase_prices')
           return (
             <Card key={server.code} index={`0${i + 1}/${t.iiko.department} ${server.department_code ?? '—'}`} title={server.name}>
               <div className="mt-3 grid grid-cols-2 gap-2 text-[12px] text-text-2">
-                <span>
-                  {t.iiko.kind.references}: {refs?.finished_at ? fmt.date(refs.finished_at) + ' ' + fmt.time(refs.finished_at) : '—'}
-                </span>
-                <span>
-                  {t.iiko.kind.purchase_prices}:{' '}
-                  {prices?.finished_at ? fmt.date(prices.finished_at) + ' ' + fmt.time(prices.finished_at) : '—'}
-                </span>
+                {ACTIONS.map(({ kind }) => {
+                  const run = latest(server.code, kind)
+                  return (
+                    <span key={kind}>
+                      {t.iiko.kind[kind]}: {run?.finished_at ? `${fmt.date(run.finished_at)} ${fmt.time(run.finished_at)}` : '—'}
+                    </span>
+                  )
+                })}
               </div>
               {isAdmin && (
                 <div className="mt-4 grid grid-cols-2 gap-2">
-                  <LaserButton
-                    variant="ghost"
-                    icon={<DatabaseZap size={14} />}
-                    loading={busy(server.code, 'references')}
-                    onClick={() => request.mutate({ server_code: server.code, kind: 'references' })}
-                  >
-                    {t.iiko.kind.references}
-                  </LaserButton>
-                  <LaserButton
-                    variant="ghost"
-                    icon={<ReceiptText size={14} />}
-                    loading={busy(server.code, 'purchase_prices')}
-                    onClick={() => request.mutate({ server_code: server.code, kind: 'purchase_prices', days: 30 })}
-                  >
-                    {t.iiko.kind.purchase_prices}
-                  </LaserButton>
+                  {ACTIONS.map(({ kind, icon: Icon, days }) => (
+                    <LaserButton
+                      key={kind}
+                      variant="ghost"
+                      icon={<Icon size={14} />}
+                      loading={busy(server.code, kind)}
+                      onClick={() => request.mutate({ server_code: server.code, kind, days })}
+                    >
+                      {t.iiko.kind[kind]}
+                    </LaserButton>
+                  ))}
                 </div>
               )}
             </Card>

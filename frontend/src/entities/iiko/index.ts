@@ -1,7 +1,7 @@
 import { queryOptions } from '@tanstack/react-query'
 import { apiRequest } from '@/shared/api/client'
 
-export type SyncKind = 'references' | 'purchase_prices'
+export type SyncKind = 'references' | 'purchase_prices' | 'stock' | 'consumption'
 export type SyncStatus = 'queued' | 'running' | 'done' | 'failed'
 
 export interface IikoServer {

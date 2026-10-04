@@ -4,6 +4,7 @@ import { Plus } from 'lucide-react'
 import { useMemo, useState } from 'react'
 import { REQUEST_FILTERS, REQUEST_STATUS_TONE, requestsQuery, type RequestFilter } from '@/entities/purchase-request'
 import { useHasRole } from '@/entities/user'
+import { AutoRequestsButton } from '@/features/auto-requests'
 import { useI18n } from '@/shared/i18n'
 import { EmptyState, LaserButton, ListRow, MoneyText, PageHeader, SegmentedControl, Skeleton, StatusBadge } from '@/shared/ui'
 
@@ -14,6 +15,7 @@ export default function RequestsPage() {
   const navigate = useNavigate()
   const canCreate = useHasRole('initiator', 'buyer', 'admin')
   const isDecider = useHasRole('buyer', 'approver', 'admin')
+  const canRunAuto = useHasRole('buyer', 'admin')
   const { data: requests = [], isPending } = useQuery(requestsQuery)
   const [chosen, setChosen] = useState<RequestFilter | null>(null)
   // Tasdiqlovchiga — avval kutayotganlar
@@ -47,6 +49,7 @@ export default function RequestsPage() {
           ) : undefined
         }
       />
+      {canRunAuto && <AutoRequestsButton />}
       <SegmentedControl className="-mx-4 px-4" segments={segments} value={filter} onChange={setChosen} />
       <div className="mt-4 flex flex-col gap-2">
         {isPending ? (

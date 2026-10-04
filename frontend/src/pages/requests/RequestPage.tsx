@@ -9,6 +9,7 @@ import {
   REQUEST_STATUS_TONE,
   requestQuery,
   requestsApi,
+  WhyQuantity,
   type RequestDetail,
   type RequestLine,
 } from '@/entities/purchase-request'
@@ -231,8 +232,11 @@ interface LineCardProps {
 
 function LineCard({ request, line, open, onToggle, editable, supplierEditable, selectable, selected, onSelect, onChanged }: LineCardProps) {
   const { t, fmt } = useI18n()
+  const [why, setWhy] = useState(false)
   const unit = t.units[line.base_unit]
   const rejected = line.decision === 'rejected'
+  const suggested = line.qty_suggested !== null ? Number(line.qty_suggested) : null
+  const changed = suggested !== null && suggested !== Number(line.qty)
   return (
     <div className={cn('rounded-row border border-border-soft bg-surface shadow-[var(--shadow-card)]', rejected && 'opacity-50')}>
       <div className="flex items-center gap-3 px-4 py-3">
@@ -260,8 +264,22 @@ function LineCard({ request, line, open, onToggle, editable, supplierEditable, s
         <div className="shrink-0 text-right">
           <div className="tnum text-[14px] font-semibold">{`${fmt.qty(Number(line.qty))} ${unit}`}</div>
           <MoneyText value={Number(line.amount)} className="text-[12px] font-normal text-text-2" />
+          {suggested !== null && (
+            <button
+              type="button"
+              className={cn('block w-full text-right text-[11px] underline decoration-dotted', changed ? 'text-warning' : 'text-text-3')}
+              onClick={() => setWhy(!why)}
+            >
+              {changed ? t.requests.why.changed(`${fmt.qty(suggested)} ${unit}`) : t.requests.why.title}
+            </button>
+          )}
         </div>
       </div>
+      {why && line.calc && (
+        <div className="px-4 pb-3">
+          <WhyQuantity calc={line.calc} unit={line.base_unit} qty={suggested ?? Number(line.qty)} />
+        </div>
+      )}
       {open && supplierEditable && <LineEditor request={request} line={line} editable={editable} onChanged={onChanged} />}
     </div>
   )
