@@ -93,6 +93,7 @@ name = "Modul ichidagi qatlamlar: (api | infrastructure) -> application -> domai
 type = "layers"
 containers = [
     "zakup.modules.catalog",
+    "zakup.modules.finance",
     "zakup.modules.identity",
     "zakup.modules.integration_iiko",
     "zakup.modules.procurement",
@@ -110,7 +111,12 @@ forbidden_modules = ["zakup.modules.*.infrastructure", "zakup.modules.*.api", "f
 [[tool.importlinter.contracts]]
 name = "Modullar bir-birining faqat application qatlamini chaqiradi (ARCHITECTURE §3.1)"
 type = "forbidden"
-source_modules = ["zakup.modules.integration_iiko", "zakup.modules.procurement", "zakup.modules.receiving"]
+source_modules = [
+    "zakup.modules.finance",
+    "zakup.modules.integration_iiko",
+    "zakup.modules.procurement",
+    "zakup.modules.receiving",
+]
 forbidden_modules = [
     "zakup.modules.catalog.domain",
     "zakup.modules.catalog.infrastructure",
@@ -135,3 +141,15 @@ type = "forbidden"
 source_modules = ["zakup.modules.integration_iiko"]
 forbidden_modules = ["zakup.modules.receiving.domain", "zakup.modules.receiving.infrastructure", "zakup.modules.receiving.api"]
 allow_indirect_imports = true
+
+[[tool.importlinter.contracts]]
+name = "finance boshqa modullarni faqat event va catalog facade orqali biladi"
+type = "forbidden"
+source_modules = ["zakup.modules.finance"]
+forbidden_modules = ["zakup.modules.procurement", "zakup.modules.receiving", "zakup.modules.integration_iiko"]
+
+[[tool.importlinter.contracts]]
+name = "Hech bir modul finance'ni import qilmaydi (procurement'ga facade bootstrap'da ulanadi)"
+type = "forbidden"
+source_modules = ["zakup.modules.procurement", "zakup.modules.receiving", "zakup.modules.integration_iiko"]
+forbidden_modules = ["zakup.modules.finance"]

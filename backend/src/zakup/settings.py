@@ -74,6 +74,10 @@ class Settings(BaseSettings):
     # iiko kirimi: o'tkazilgan holda (Tarnov amaliyoti); nizo bo'lgan qabul — o'tkazilmagan, buxgalter tekshiradi
     iiko_post_invoices: bool = True
     iiko_post_disputed: bool = False
+    # To'lovlar (WORKFLOW B12): zayavka tasdiqlanadimi; qarzi muddati o'tgan / limiti tugagan yetkazuvchiga buyurtma:
+    # require_admin — faqat admin tasdiqlaydi, block — taqiqlanadi, off — tekshirilmaydi
+    payment_approval_required: bool = True
+    supplier_debt_policy: Literal["require_admin", "block", "off"] = "require_admin"
 
     cors_origins: list[str] = ["http://localhost:5173", "http://127.0.0.1:5173"]
 

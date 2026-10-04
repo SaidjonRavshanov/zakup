@@ -5,6 +5,8 @@ Yangi modul qo'shish: router'ni `ROUTERS` ga, provider'larni `_wire_*` ga qo'shi
 
 from collections.abc import AsyncIterator, Callable
 from contextlib import asynccontextmanager
+from datetime import datetime
+from decimal import Decimal
 from pathlib import Path
 from typing import Annotated, Any, Protocol, TypeVar
 from uuid import UUID
@@ -54,6 +56,26 @@ from zakup.modules.catalog.infrastructure.repositories import (
     SqlStoreRepository,
     SqlSupplierRepository,
 )
+from zakup.modules.finance.api.router import router as finance_router
+from zakup.modules.finance.application.use_cases import (
+    ApprovePayment,
+    CancelPayment,
+    CreatePayment,
+    FinanceSettings,
+    GetPayment,
+    GetProof,
+    GetSupplierAccount,
+    ListBalances,
+    ListPayments,
+    PayPayment,
+    RegisterObligation,
+    RejectPayment,
+    SupplierCredit,
+    UploadProof,
+)
+from zakup.modules.finance.infrastructure.adapters import SuppliersAdapter
+from zakup.modules.finance.infrastructure.readers import SqlFinanceReader
+from zakup.modules.finance.infrastructure.repositories import SqlObligationRepository, SqlPaymentRepository
 from zakup.modules.identity.api.router import auth_router, dev_auth_router, me_router, users_router
 from zakup.modules.identity.application.use_cases import (
     ActivateUser,
@@ -115,7 +137,7 @@ from zakup.modules.procurement.application.requests import (
     ReviseRequest,
     SubmitRequest,
 )
-from zakup.modules.procurement.domain.approval import ApprovalPolicy
+from zakup.modules.procurement.domain.approval import ApprovalPolicy, SupplierDebtPolicy
 from zakup.modules.procurement.domain.order import Tolerance
 from zakup.modules.procurement.infrastructure.catalog_adapter import CatalogAdapter
 from zakup.modules.procurement.infrastructure.readers import SqlOrderReader, SqlRequestReader
@@ -160,6 +182,7 @@ ROUTERS: tuple[APIRouter, ...] = (
     procurement_router,
     procurement_public_router,
     receiving_router,
+    finance_router,
 )
 
 T = TypeVar("T")
@@ -199,6 +222,7 @@ def wire(
     _wire_iiko(overrides, per_request, build_iiko_gateway(settings, engine))
     _wire_procurement(overrides, per_request, settings)
     _wire_receiving(overrides, per_request, settings)
+    _wire_finance(overrides, per_request, settings)
 
 
 def _wire_identity(
@@ -392,7 +416,15 @@ def _wire_procurement(overrides: Overrides, per_request: PerRequest, settings: S
         RemoveRequestLine: lambda s: RemoveRequestLine(uow(s), requests(s)),
         ChooseLineOffer: lambda s: ChooseLineOffer(uow(s), requests(s), catalog_port(s)),
         SubmitRequest: lambda s: SubmitRequest(uow(s), requests(s)),
-        ApproveRequest: lambda s: ApproveRequest(uow(s), requests(s), orders(s), catalog_port(s), policy=policy),
+        ApproveRequest: lambda s: ApproveRequest(
+            uow(s),
+            requests(s),
+            orders(s),
+            catalog_port(s),
+            policy=policy,
+            credit=SupplierCredit(SqlFinanceReader(s), SuppliersAdapter(catalog_queries(s))),
+            debt_policy=SupplierDebtPolicy(settings.supplier_debt_policy),
+        ),
         ReturnRequest: lambda s: ReturnRequest(uow(s), requests(s)),
         RejectRequest: lambda s: RejectRequest(uow(s), requests(s)),
         CancelRequest: lambda s: CancelRequest(uow(s), requests(s)),
@@ -446,6 +478,38 @@ def _wire_receiving(overrides: Overrides, per_request: PerRequest, settings: Set
         overrides[Stub(use_case)] = per_request(build)
 
 
+# ---------------------------------------------------------------- finance
+
+
+def _wire_finance(overrides: Overrides, per_request: PerRequest, settings: Settings) -> None:
+    media = Path(settings.media_dir)
+    finance_settings = FinanceSettings(payment_approval_required=settings.payment_approval_required)
+
+    def uow(session: AsyncSession) -> SqlAlchemyUnitOfWork:
+        return SqlAlchemyUnitOfWork(session)
+
+    def suppliers(session: AsyncSession) -> SuppliersAdapter:
+        return SuppliersAdapter(catalog_queries(session))
+
+    payments, obligations, reader = SqlPaymentRepository, SqlObligationRepository, SqlFinanceReader
+    providers: dict[type, Callable[[AsyncSession], Any]] = {
+        ListBalances: lambda s: ListBalances(reader(s), payments(s), suppliers(s)),
+        GetSupplierAccount: lambda s: GetSupplierAccount(reader(s), payments(s), suppliers(s)),
+        CreatePayment: lambda s: CreatePayment(uow(s), payments(s), obligations(s), finance_settings),
+        ApprovePayment: lambda s: ApprovePayment(uow(s), payments(s)),
+        RejectPayment: lambda s: RejectPayment(uow(s), payments(s)),
+        CancelPayment: lambda s: CancelPayment(uow(s), payments(s)),
+        # To'lov tasdig'i — umumiy fayl omborida (receiving.attachments)
+        PayPayment: lambda s: PayPayment(uow(s), payments(s), obligations(s), LocalAttachments(s, media)),
+        ListPayments: lambda s: ListPayments(reader(s), suppliers(s)),
+        GetPayment: lambda s: GetPayment(reader(s), suppliers(s)),
+        UploadProof: lambda s: UploadProof(uow(s), LocalAttachments(s, media)),
+        GetProof: lambda s: GetProof(LocalAttachments(s, media)),
+    }
+    for use_case, build in providers.items():
+        overrides[Stub(use_case)] = per_request(build)
+
+
 # ---------------------------------------------------------------- worker: outbox va iiko kirimi
 
 
@@ -456,10 +520,27 @@ def _receipts_port(session: AsyncSession) -> ReceiptsAdapter:
 def outbox_handlers() -> dict[str, Callable[[AsyncSession, dict[str, Any]], Any]]:
     """Event → modul reaksiyasi (ARCHITECTURE §3.1.2): receiving ular haqida hech narsa bilmaydi."""
 
-    async def enqueue_invoice(session: AsyncSession, payload: dict[str, Any]) -> None:
-        await EnqueueInvoiceExport(SqlExportQueue(session), _receipts_port(session))(UUID(payload["aggregate_id"]))
+    async def register_obligation(session: AsyncSession, payload: dict[str, Any], *, blocked: bool) -> None:
+        register = RegisterObligation(SqlObligationRepository(session), SuppliersAdapter(catalog_queries(session)))
+        await register(
+            receipt_id=UUID(payload["aggregate_id"]),
+            receipt_number=payload["number"],
+            supplier_id=UUID(payload["supplier_id"]),
+            store_id=UUID(payload["store_id"]),
+            amount=Decimal(payload["amount"]),
+            received_at=datetime.fromisoformat(payload["received_at"]),
+            blocked=blocked,
+        )
 
-    return {"receiving.receipt_accepted": enqueue_invoice}
+    async def receipt_accepted(session: AsyncSession, payload: dict[str, Any]) -> None:
+        # Ikkala reaksiya ham idempotent: xato bo'lsa event to'liq qayta ishlanadi
+        await EnqueueInvoiceExport(SqlExportQueue(session), _receipts_port(session))(UUID(payload["aggregate_id"]))
+        await register_obligation(session, payload, blocked=False)
+
+    async def receipt_disputed(session: AsyncSession, payload: dict[str, Any]) -> None:
+        await register_obligation(session, payload, blocked=True)
+
+    return {"receiving.receipt_accepted": receipt_accepted, "receiving.receipt_disputed": receipt_disputed}
 
 
 def build_invoice_exporter(

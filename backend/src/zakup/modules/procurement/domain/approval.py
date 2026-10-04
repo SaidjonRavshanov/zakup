@@ -20,6 +20,22 @@ class ApprovalLimitError(PermissionDeniedError):
     code = "approval_limit"
 
 
+class SupplierDebtPolicy(StrEnum):
+    """Qarzi muddati o'tgan / limiti tugagan yetkazuvchiga yangi buyurtma (WORKFLOW B12, sozlamada)."""
+
+    REQUIRE_ADMIN = "require_admin"  # faqat admin (direktor) tasdiqlaydi
+    BLOCK = "block"
+    OFF = "off"
+
+
+def ensure_supplier_credit(actor: Principal, reason: str | None, policy: SupplierDebtPolicy, *, supplier: str) -> None:
+    if reason is None or policy is SupplierDebtPolicy.OFF:
+        return
+    if policy is SupplierDebtPolicy.REQUIRE_ADMIN and actor.has_role(Role.ADMIN):
+        return
+    raise ApprovalLimitError(f"approval.supplier_{reason}", supplier=supplier)
+
+
 class Decision(StrEnum):
     APPROVED = "approved"
     PARTIAL = "partial"

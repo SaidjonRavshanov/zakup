@@ -1,25 +1,14 @@
 """iiko'dan ma'lumotnoma → zayavka → PO → qabul (foto bilan) → outbox → iiko kirimi (soxta server)."""
 
-from collections.abc import AsyncIterator
-from dataclasses import dataclass
-from datetime import UTC, datetime
 from uuid import uuid4
 
-import httpx
 import pytest
 from defusedxml.ElementTree import fromstring
 from httpx import AsyncClient
 from sqlalchemy import text
-from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
+from sqlalchemy.ext.asyncio import AsyncEngine
 
-from tests.fakes.iiko_server import FakeIikoState, create_fake_iiko
-from tests.integration.conftest import FAKE_IIKO_SERVERS, TEST_DB_URL, onboard
-from zakup.bootstrap import build_invoice_exporter, iiko_scope_factory, outbox_handlers
-from zakup.modules.integration_iiko.application.runs import RunNextSync
-from zakup.modules.integration_iiko.infrastructure.client import HttpIikoGateway, PgAdvisoryLock
-from zakup.platform.db import create_session_factory
-from zakup.platform.outbox_relay import OutboxRelay
-from zakup.settings import Settings
+from tests.integration.conftest import Worker, onboard
 from zakup.shared_kernel.ids import uuid7
 
 pytestmark = pytest.mark.integration
@@ -29,44 +18,6 @@ STORE_IIKO = "bbbbbbbb-0000-4000-8000-000000000011"  # Sebzar — Главный
 CASH_CARD = "eeeeeeee-0000-4000-8000-000000000002"  # НАЛ Азиз ака
 LINK_SQL = "SELECT local_id FROM iiko.links WHERE kind = :kind AND iiko_id = CAST(:iiko_id AS uuid)"
 PHOTO = b"\xff\xd8\xff\xe0fake-jpeg"
-
-
-@pytest.fixture
-async def engine() -> AsyncIterator[AsyncEngine]:
-    engine = create_async_engine(TEST_DB_URL)
-    yield engine
-    await engine.dispose()
-
-
-@dataclass
-class Worker:
-    sync: RunNextSync
-    relay: OutboxRelay
-    export: object
-    state: FakeIikoState
-
-    async def drain(self) -> None:
-        while await self.sync() | bool(await self.relay()) | await self.export():  # type: ignore[operator]
-            pass
-
-
-@pytest.fixture
-def worker(engine: AsyncEngine, settings: Settings) -> Worker:
-    state = FakeIikoState()
-    sessions = create_session_factory(engine)
-    gateway = HttpIikoGateway(
-        FAKE_IIKO_SERVERS,
-        PgAdvisoryLock(engine, wait_s=5),
-        timeout_s=10,
-        transport=httpx.ASGITransport(app=create_fake_iiko(state=state)),
-    )
-    clock = lambda: datetime(2026, 10, 3, 6, tzinfo=UTC)  # noqa: E731 — fixture nakladnoylari sanasi
-    return Worker(
-        sync=RunNextSync(gateway, iiko_scope_factory(sessions), clock=clock),
-        relay=OutboxRelay(sessions, outbox_handlers()),
-        export=build_invoice_exporter(settings, gateway, sessions),
-        state=state,
-    )
 
 
 async def _query(engine: AsyncEngine, sql: str, **params: object) -> list[tuple[object, ...]]:

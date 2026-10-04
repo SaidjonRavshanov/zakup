@@ -6,6 +6,7 @@ from sqlalchemy.engine import Connection
 from sqlalchemy.ext.asyncio import create_async_engine
 
 from zakup.modules.catalog.infrastructure import tables as _catalog  # noqa: F401
+from zakup.modules.finance.infrastructure import tables as _finance  # noqa: F401
 from zakup.modules.identity.infrastructure import tables as _identity  # noqa: F401
 from zakup.modules.integration_iiko.infrastructure import tables as _iiko  # noqa: F401
 from zakup.modules.procurement.infrastructure import tables as _procurement  # noqa: F401

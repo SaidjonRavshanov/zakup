@@ -67,6 +67,12 @@ class CatalogPort(Protocol):
     ) -> CatalogLabels: ...
 
 
+class SupplierCreditPort(Protocol):
+    """Yetkazuvchi qarzi (finance facade'i, bootstrap ulaydi): `overdue` / `over_limit` yoki None (WORKFLOW B12)."""
+
+    async def check(self, supplier_id: UUID, amount: Decimal) -> str | None: ...
+
+
 class RequestReader(Protocol):
     async def list(
         self, *, statuses: set[RequestStatus] | None, store_ids: set[UUID] | None, initiator_id: UUID | None, limit: int

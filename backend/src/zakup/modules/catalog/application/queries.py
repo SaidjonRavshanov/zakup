@@ -20,6 +20,7 @@ from zakup.modules.catalog.application.ports import (
     SupplierRepository,
 )
 from zakup.modules.catalog.domain.offer import SupplierOffer
+from zakup.modules.catalog.domain.supplier import PaymentTerms
 
 
 @dataclass(frozen=True, slots=True)
@@ -50,6 +51,9 @@ class SupplierTerms:
     lead_time_days: int
     phone: str | None
     telegram: str | None
+    payment_terms: str = "on_delivery"
+    deferral_days: int = 0  # faqat payment_terms=deferred bo'lsa
+    credit_limit: Decimal = Decimal(0)  # 0 — limit yo'q
 
 
 class CatalogQueries:
@@ -127,6 +131,9 @@ class CatalogQueries:
             lead_time_days=supplier.schedule.lead_time_days,
             phone=supplier.contacts.phone,
             telegram=supplier.contacts.telegram,
+            payment_terms=supplier.payment_terms.value,
+            deferral_days=supplier.deferral_days if supplier.payment_terms is PaymentTerms.DEFERRED else 0,
+            credit_limit=supplier.credit_limit.amount,
         )
 
     async def labels(

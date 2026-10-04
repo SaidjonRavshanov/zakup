@@ -370,6 +370,55 @@ MESSAGES: Final[dict[str, dict[Locale, str]]] = {
         "uz": "O'zingizdan administrator rolini olib bo'lmaydi",
         "ru": "Нельзя снять роль администратора с самого себя",
     },
+    # ---- finance (to'lovlar)
+    "invalid_payment": {"uz": "To'lov ma'lumotlari noto'g'ri", "ru": "Некорректные данные оплаты"},
+    "payment.not_found": {"uz": "To'lov zayavkasi topilmadi", "ru": "Заявка на оплату не найдена"},
+    "payment.modified": {
+        "uz": "Ma'lumot boshqa foydalanuvchi tomonidan o'zgartirilgan — sahifani yangilang",
+        "ru": "Данные изменены другим пользователем — обновите страницу",
+    },
+    "payment.invalid_status": {
+        "uz": "Zayavkaning hozirgi holatida bu amal mumkin emas",
+        "ru": "В текущем статусе заявки это действие недоступно",
+    },
+    "payment.no_lines": {"uz": "Kamida bitta nakladnoy tanlang", "ru": "Выберите хотя бы одну накладную"},
+    "payment.duplicate_line": {
+        "uz": "Bitta nakladnoy ikki marta tanlangan",
+        "ru": "Одна накладная выбрана дважды",
+    },
+    "payment.amount_invalid": {"uz": "Summa noto'g'ri", "ru": "Некорректная сумма"},
+    "payment.amount_below_paid": {
+        "uz": "Yakuniy summa allaqachon to'langanidan kam",
+        "ru": "Итоговая сумма меньше уже оплаченной",
+    },
+    "payment.obligation_not_found": {
+        "uz": "Nakladnoy bu yetkazuvchiga tegishli emas yoki topilmadi",
+        "ru": "Накладная не найдена или относится к другому поставщику",
+    },
+    "payment.obligation_blocked": {
+        "uz": "{number}: nizo ochiq — nizo yopilmaguncha to'lab bo'lmaydi",
+        "ru": "{number}: открыт спор — до его закрытия оплата заблокирована",
+    },
+    "payment.over_outstanding": {
+        "uz": "{number}: summa qarz qoldig'idan (boshqa zayavkalardagini hisobga olib) katta",
+        "ru": "{number}: сумма больше остатка долга (с учётом других заявок)",
+    },
+    "payment.comment_required": {"uz": "Sababini yozing", "ru": "Укажите причину"},
+    "payment.proof_not_found": {"uz": "To'lov tasdig'i fayli topilmadi", "ru": "Файл подтверждения оплаты не найден"},
+    "payment.file_type": {
+        "uz": "Faqat rasm (JPEG, PNG, WebP) yoki PDF",
+        "ru": "Только изображение (JPEG, PNG, WebP) или PDF",
+    },
+    "payment.file_size": {"uz": "Fayl {max_mb} MB dan katta", "ru": "Файл больше {max_mb} МБ"},
+    "payment.file_not_found": {"uz": "Fayl topilmadi", "ru": "Файл не найден"},
+    "approval.supplier_overdue": {
+        "uz": "{supplier}: muddati o'tgan qarz bor — buyurtmani faqat admin tasdiqlaydi",
+        "ru": "{supplier}: есть просроченный долг — заказ утверждает только администратор",
+    },
+    "approval.supplier_over_limit": {
+        "uz": "{supplier}: kredit limiti yetmaydi — buyurtmani faqat admin tasdiqlaydi",
+        "ru": "{supplier}: кредитный лимит исчерпан — заказ утверждает только администратор",
+    },
 }
 
 

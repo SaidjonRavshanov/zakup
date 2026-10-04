@@ -3,16 +3,25 @@
 import os
 import tempfile
 from collections.abc import AsyncIterator
+from dataclasses import dataclass
+from datetime import UTC, datetime
 from pathlib import Path
 
+import httpx
 import pytest
 from alembic import command
 from alembic.config import Config
 from httpx import ASGITransport, AsyncClient, Response
 from sqlalchemy import text
-from sqlalchemy.ext.asyncio import create_async_engine
+from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
 
+from tests.fakes.iiko_server import FakeIikoState, create_fake_iiko
+from zakup.bootstrap import build_invoice_exporter, iiko_scope_factory, outbox_handlers
 from zakup.entrypoints.api import create_app
+from zakup.modules.integration_iiko.application.runs import RunNextSync
+from zakup.modules.integration_iiko.infrastructure.client import HttpIikoGateway, PgAdvisoryLock
+from zakup.platform.db import create_session_factory
+from zakup.platform.outbox_relay import OutboxRelay
 from zakup.settings import IikoServerSettings, Settings
 
 TEST_DB_URL = os.environ.get("ZAKUP_TEST_DATABASE_URL", "postgresql+asyncpg://postgres@127.0.0.1:5432/zakup_test")
@@ -114,3 +123,44 @@ async def admin_headers(client: AsyncClient) -> dict[str, str]:
     response = await sign_in(client, ADMIN_TELEGRAM_ID, "Admin")
     assert response.status_code == 200, response.text
     return bearer(response.json())
+
+
+# ---------------------------------------------------------------- oqim testlari: worker (soxta iiko)
+
+
+@pytest.fixture
+async def engine() -> AsyncIterator[AsyncEngine]:
+    engine = create_async_engine(TEST_DB_URL)
+    yield engine
+    await engine.dispose()
+
+
+@dataclass
+class Worker:
+    sync: RunNextSync
+    relay: OutboxRelay
+    export: object
+    state: FakeIikoState
+
+    async def drain(self) -> None:
+        while await self.sync() | bool(await self.relay()) | await self.export():  # type: ignore[operator]
+            pass
+
+
+@pytest.fixture
+def worker(engine: AsyncEngine, settings: Settings) -> Worker:
+    state = FakeIikoState()
+    sessions = create_session_factory(engine)
+    gateway = HttpIikoGateway(
+        FAKE_IIKO_SERVERS,
+        PgAdvisoryLock(engine, wait_s=5),
+        timeout_s=10,
+        transport=httpx.ASGITransport(app=create_fake_iiko(state=state)),
+    )
+    clock = lambda: datetime(2026, 10, 3, 6, tzinfo=UTC)  # noqa: E731 — fixture nakladnoylari sanasi
+    return Worker(
+        sync=RunNextSync(gateway, iiko_scope_factory(sessions), clock=clock),
+        relay=OutboxRelay(sessions, outbox_handlers()),
+        export=build_invoice_exporter(settings, gateway, sessions),
+        state=state,
+    )

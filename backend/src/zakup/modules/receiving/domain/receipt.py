@@ -144,17 +144,26 @@ class ReceiptAccepted(DomainEvent):
     """Qabul yakunlandi (bloklovchi farq yo'q yoki nizo yechildi) → iiko kirimi, majburiyat, akt."""
 
     event_type: ClassVar[str] = "receiving.receipt_accepted"
+    number: str
     order_id: str
     store_id: str
     supplier_id: str
     amount: str
+    received_at: str
     had_dispute: bool
 
 
 @dataclass(frozen=True, kw_only=True)
 class ReceiptDisputed(DomainEvent):
+    """Nizo ochildi → majburiyat bloklangan holda yaratiladi (to'lab bo'lmaydi)."""
+
     event_type: ClassVar[str] = "receiving.receipt_disputed"
+    number: str
     order_id: str
+    store_id: str
+    supplier_id: str
+    amount: str
+    received_at: str
     kinds: list[str]
 
 
@@ -232,7 +241,12 @@ class Receipt(AggregateRoot):
             receipt.record(
                 ReceiptDisputed(
                     aggregate_id=receipt.id,
+                    number=receipt.number,
                     order_id=str(header.order_id),
+                    store_id=str(header.store_id),
+                    supplier_id=str(header.supplier_id),
+                    amount=str(receipt.total),
+                    received_at=header.received_at.isoformat(),
                     kinds=sorted({d.kind.value for d in blocking}),
                 )
             )
@@ -270,10 +284,12 @@ class Receipt(AggregateRoot):
         self.record(
             ReceiptAccepted(
                 aggregate_id=self.id,
+                number=self.number,
                 order_id=str(self.header.order_id),
                 store_id=str(self.header.store_id),
                 supplier_id=str(self.header.supplier_id),
                 amount=str(self.total),
+                received_at=self.header.received_at.isoformat(),
                 had_dispute=self.dispute is not None,
             )
         )

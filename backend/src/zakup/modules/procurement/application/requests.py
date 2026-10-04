@@ -13,8 +13,9 @@ from zakup.modules.procurement.application.ports import (
     OrderRepository,
     RequestReader,
     RequestRepository,
+    SupplierCreditPort,
 )
-from zakup.modules.procurement.domain.approval import ApprovalPolicy
+from zakup.modules.procurement.domain.approval import ApprovalPolicy, SupplierDebtPolicy, ensure_supplier_credit
 from zakup.modules.procurement.domain.order import NewOrderLine, PurchaseOrder
 from zakup.modules.procurement.domain.request import (
     InvalidRequestError,
@@ -218,6 +219,8 @@ class ApproveRequest:
         catalog: CatalogPort,
         *,
         policy: ApprovalPolicy,
+        credit: SupplierCreditPort | None = None,
+        debt_policy: SupplierDebtPolicy = SupplierDebtPolicy.REQUIRE_ADMIN,
         clock: Clock = utc_now,
     ) -> None:
         self._uow = uow
@@ -225,6 +228,8 @@ class ApproveRequest:
         self._orders = orders
         self._catalog = catalog
         self._policy = policy
+        self._credit = credit
+        self._debt_policy = debt_policy
         self._clock = clock
 
     async def __call__(self, actor: Principal, request_id: UUID, *, line_ids: set[UUID] | None = None) -> list[UUID]:
@@ -232,14 +237,14 @@ class ApproveRequest:
             request = await _load(self._requests, request_id)
             actor.require(*DECIDERS, store_id=request.store_id)
             request.approve(actor, self._policy, at=self._clock(), line_ids=line_ids)
-            order_ids = await self._split(request)
+            order_ids = await self._split(request, actor)
             request.mark_split()
             await self._requests.save(request)
             self._uow.track(request)
             await self._uow.commit()
             return order_ids
 
-    async def _split(self, request: PurchaseRequest) -> list[UUID]:
+    async def _split(self, request: PurchaseRequest, actor: Principal) -> list[UUID]:
         by_supplier: dict[UUID, list[NewOrderLine]] = defaultdict(list)
         for line in request.approved_lines:
             assert line.offer is not None  # approve() tekshirgan
@@ -260,6 +265,8 @@ class ApproveRequest:
             )
         order_ids = []
         for supplier_id, lines in by_supplier.items():
+            amount = sum((ln.qty_packs * ln.price_per_pack for ln in lines), Decimal(0))
+            await self._check_credit(actor, supplier_id, amount)
             order = PurchaseOrder.create(
                 number=await self._orders.next_number(),
                 request_id=request.id,
@@ -271,6 +278,14 @@ class ApproveRequest:
             await self._orders.add(order)
             order_ids.append(order.id)
         return order_ids
+
+    async def _check_credit(self, actor: Principal, supplier_id: UUID, amount: Decimal) -> None:
+        if self._credit is None:
+            return
+        reason = await self._credit.check(supplier_id, amount)
+        if reason is not None:
+            supplier = await self._catalog.supplier(supplier_id)
+            ensure_supplier_credit(actor, reason, self._debt_policy, supplier=supplier.name if supplier else "?")
 
 
 class ReturnRequest:
