@@ -6,8 +6,8 @@ import { EmptyState, PageHeader, Skeleton } from '@/shared/ui'
 
 export default function ReceivingListPage() {
   const navigate = useNavigate()
-  const { t, locale } = useI18n()
-  const { data: orders = [], isPending } = useQuery(purchaseOrdersQuery(locale))
+  const { t } = useI18n()
+  const { data: orders = [], isPending } = useQuery(purchaseOrdersQuery())
   const toReceive = orders.filter((po) => ORDER_FILTERS.in_transit?.includes(po.status))
 
   return (

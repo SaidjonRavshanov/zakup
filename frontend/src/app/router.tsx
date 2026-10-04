@@ -59,6 +59,29 @@ const catalogRoute = createRoute({
   component: lazyRouteComponent(() => import('@/pages/catalog/CatalogPage')),
 })
 
+const requestRoutes = [
+  createRoute({
+    getParentRoute: () => shellRoute,
+    path: '/requests',
+    component: lazyRouteComponent(() => import('@/pages/requests/RequestsPage')),
+  }),
+  createRoute({
+    getParentRoute: () => shellRoute,
+    path: '/requests/new',
+    component: lazyRouteComponent(() => import('@/pages/requests/RequestNewPage')),
+  }),
+  createRoute({
+    getParentRoute: () => shellRoute,
+    path: '/requests/$requestId',
+    component: lazyRouteComponent(() => import('@/pages/requests/RequestPage')),
+  }),
+  createRoute({
+    getParentRoute: () => shellRoute,
+    path: '/orders/$orderId',
+    component: lazyRouteComponent(() => import('@/pages/orders/OrderPage')),
+  }),
+] as const
+
 const iikoRoute = createRoute({
   getParentRoute: () => shellRoute,
   path: '/admin/iiko',
@@ -126,7 +149,7 @@ const devUiRoute = createRoute({
 })
 
 const routeTree = rootRoute.addChildren([
-  shellRoute.addChildren([dashboardRoute, ordersRoute, receivingRoute, receiveOrderRoute, profileRoute, usersRoute, userEditRoute, iikoRoute, catalogRoute, ...catalogRoutes, devUiRoute]),
+  shellRoute.addChildren([dashboardRoute, ordersRoute, receivingRoute, receiveOrderRoute, profileRoute, usersRoute, userEditRoute, iikoRoute, ...requestRoutes, catalogRoute, ...catalogRoutes, devUiRoute]),
 ])
 
 export const router = createRouter({

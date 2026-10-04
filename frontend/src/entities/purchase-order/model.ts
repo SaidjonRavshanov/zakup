@@ -4,23 +4,55 @@ import type { Tone } from '@/shared/ui'
 /** Backend status mashinasi bilan bir xil (docs/ARCHITECTURE.md §5). */
 export type PurchaseOrderStatus = PurchaseOrderStatusKey
 
-export interface PurchaseOrderLine {
-  id: string
-  productName: string
-  unit: UnitCode
-  qtyOrdered: number
-  priceOrdered: number
-}
+export type ResponseKind = 'confirmed' | 'price_changed' | 'qty_changed' | 'out_of_stock'
+export type Channel = 'telegram' | 'whatsapp' | 'phone' | 'email' | 'other'
 
+export const CHANNELS: ReadonlyArray<Channel> = ['telegram', 'whatsapp', 'phone', 'email', 'other']
+export const RESPONSE_KINDS: ReadonlyArray<ResponseKind> = ['confirmed', 'price_changed', 'qty_changed', 'out_of_stock']
+
+/** Ro'yxat qatori. Pul — ko'rsatish uchun son (hisob-kitob backend'da). */
 export interface PurchaseOrder {
   id: string
   number: string
+  requestId: string | null
+  supplierId: string
   supplierName: string
+  storeId: string
   storeName: string
   status: PurchaseOrderStatus
   deliveryDate: string
   totalAmount: number
+  confirmedTotal: number
+  linesCount: number
+  sentAt: string | null
+  responseDeadline: string | null
+}
+
+/** Pozitsiya yetkazuvchi qadog'ida: `unit` — qadoq birligi (qop), `packFactor` — undagi bazaviy miqdor. */
+export interface PurchaseOrderLine {
+  id: string
+  productName: string
+  baseUnit: UnitCode
+  unit: UnitCode
+  packFactor: number
+  qtyOrdered: number
+  priceOrdered: number
+  amount: number
+  response: ResponseKind | null
+  qtyConfirmed: number | null
+  priceConfirmed: number | null
+  needsReapproval: boolean
+}
+
+export interface PurchaseOrderDetail extends Omit<PurchaseOrder, 'linesCount'> {
   lines: PurchaseOrderLine[]
+  supplierPhone: string | null
+  supplierTelegram: string | null
+  minOrderAmount: number
+  sentChannel: Channel | null
+  respondedAt: string | null
+  cancelReason: string | null
+  warnings: string[]
 }
 
 /** Status rangi. Matn — lug'atda: `t.poStatus[status]`. */
@@ -45,6 +77,3 @@ export const ORDER_FILTERS: Record<OrderFilter, ReadonlyArray<PurchaseOrderStatu
   in_transit: ['CONFIRMED', 'PARTIALLY_CONFIRMED', 'RECEIVING'],
   done: ['RECEIVED', 'PARTIALLY_RECEIVED', 'CLOSED', 'CANCELLED'],
 }
-
-export const orderTotal = (lines: ReadonlyArray<PurchaseOrderLine>): number =>
-  lines.reduce((sum, line) => sum + line.qtyOrdered * line.priceOrdered, 0)

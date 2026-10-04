@@ -17,8 +17,8 @@ const DIVISIBLE_UNITS: ReadonlySet<UnitCode> = new Set(['kg', 'g', 'l', 'ml'])
 export default function ReceiveOrderPage() {
   const { orderId } = useParams({ from: '/shell/receiving/$orderId' })
   const navigate = useNavigate()
-  const { t, locale } = useI18n()
-  const { data: order, isPending, isError } = useQuery(purchaseOrderQuery(orderId, locale))
+  const { t } = useI18n()
+  const { data: order, isPending, isError } = useQuery(purchaseOrderQuery(orderId))
   const [facts, setFacts] = useState<Record<string, number>>({})
   const [photo, setPhoto] = useState<File | null>(null)
 

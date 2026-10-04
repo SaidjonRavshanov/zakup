@@ -8,7 +8,7 @@ export function OrderRow({ order, onClick }: { order: PurchaseOrder; onClick?: (
     <ListRow
       meta={`${order.number} · ${order.storeName} · ${fmt.date(order.deliveryDate)}`}
       title={order.supplierName}
-      subtitle={t.orders.positions(order.lines.length)}
+      subtitle={t.orders.positions(order.linesCount)}
       badge={<StatusBadge tone={PO_STATUS_TONE[order.status]}>{t.poStatus[order.status]}</StatusBadge>}
       trailing={<MoneyText value={order.totalAmount} className="text-[13px]" />}
       onClick={onClick}

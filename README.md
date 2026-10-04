@@ -15,9 +15,10 @@ Talablar: Python 3.12+, Node 22+, PostgreSQL 16+ (lokal). Docker va Redis hozirc
 
 ### 1. Baza
 ```bash
-psql -h 127.0.0.1 -U postgres -c "CREATE DATABASE zakup ENCODING 'UTF8' TEMPLATE template0"
-psql -h 127.0.0.1 -U postgres -c "CREATE DATABASE zakup_test ENCODING 'UTF8' TEMPLATE template0"
+psql -h 127.0.0.1 -U postgres -c "CREATE DATABASE zakup ENCODING 'UTF8' LOCALE_PROVIDER icu ICU_LOCALE 'und' LOCALE 'C' TEMPLATE template0"
+psql -h 127.0.0.1 -U postgres -c "CREATE DATABASE zakup_test ENCODING 'UTF8' LOCALE_PROVIDER icu ICU_LOCALE 'und' LOCALE 'C' TEMPLATE template0"
 ```
+> ICU shart: `C` lokalida `ILIKE` kirill harflarining katta/kichigini farqlaydi ("Мука" ≠ "мука") — qidiruv ishlamaydi.
 
 ### 2. Backend → http://127.0.0.1:8010 (Swagger: `/api/docs`)
 ```bash

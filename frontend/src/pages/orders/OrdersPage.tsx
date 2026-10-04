@@ -9,8 +9,8 @@ const FILTER_KEYS = Object.keys(ORDER_FILTERS) as OrderFilter[]
 
 export default function OrdersPage() {
   const navigate = useNavigate()
-  const { t, locale } = useI18n()
-  const { data: orders = [], isPending } = useQuery(purchaseOrdersQuery(locale))
+  const { t } = useI18n()
+  const { data: orders = [], isPending } = useQuery(purchaseOrdersQuery())
   const [filter, setFilter] = useState<OrderFilter>('all')
   const [search, setSearch] = useState('')
   const query = useDeferredValue(search.trim().toLowerCase())
@@ -50,7 +50,7 @@ export default function OrdersPage() {
           <EmptyState code="404" title={t.common.notFound} description={t.orders.emptyHint} />
         ) : (
           visible.map((po) => (
-            <OrderRow key={po.id} order={po} onClick={() => navigate({ to: '/receiving/$orderId', params: { orderId: po.id } })} />
+            <OrderRow key={po.id} order={po} onClick={() => navigate({ to: '/orders/$orderId', params: { orderId: po.id } })} />
           ))
         )}
       </div>

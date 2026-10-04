@@ -17,8 +17,8 @@ const today = () => new Date().toISOString().slice(0, 10)
 
 export default function DashboardPage() {
   const navigate = useNavigate()
-  const { t, fmt, locale } = useI18n()
-  const { data: orders, isPending } = useQuery(purchaseOrdersQuery(locale))
+  const { t, fmt } = useI18n()
+  const { data: orders, isPending } = useQuery(purchaseOrdersQuery())
   const arriving = orders?.filter((po) => po.deliveryDate === today() && po.status !== 'CANCELLED') ?? []
   const todayTotal = arriving.reduce((sum, po) => sum + po.totalAmount, 0)
 
