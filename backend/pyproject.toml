@@ -58,6 +58,8 @@ known-first-party = ["zakup", "tests"]
 "src/zakup/modules/procurement/application/message.py" = ["RUF001"]
 "tests/**" = ["PLR2004", "S105", "S106", "RUF001", "RUF003"]
 "alembic/**" = ["N999"]
+# Hisobot SQL'i faqat ichki konstantalardan yig'iladi; foydalanuvchi qiymatlari — bind parametrlar
+"src/zakup/modules/analytics/infrastructure/readers.py" = ["S608"]
 
 # ---------------------------------------------------------------- mypy
 [tool.mypy]
@@ -92,6 +94,7 @@ forbidden_modules = ["fastapi", "sqlalchemy", "pydantic", "asyncpg", "zakup.plat
 name = "Modul ichidagi qatlamlar: (api | infrastructure) -> application -> domain"
 type = "layers"
 containers = [
+    "zakup.modules.analytics",
     "zakup.modules.catalog",
     "zakup.modules.finance",
     "zakup.modules.identity",
@@ -173,3 +176,17 @@ type = "forbidden"
 source_modules = ["zakup.modules.integration_iiko", "zakup.modules.procurement"]
 forbidden_modules = ["zakup.modules.planning.domain", "zakup.modules.planning.infrastructure"]
 allow_indirect_imports = true
+
+[[tool.importlinter.contracts]]
+name = "analytics - read-model: boshqa modullar kodini import qilmaydi (faqat SQL orqali o'qiydi)"
+type = "forbidden"
+source_modules = ["zakup.modules.analytics"]
+forbidden_modules = [
+    "zakup.modules.catalog",
+    "zakup.modules.finance",
+    "zakup.modules.identity",
+    "zakup.modules.integration_iiko",
+    "zakup.modules.planning",
+    "zakup.modules.procurement",
+    "zakup.modules.receiving",
+]

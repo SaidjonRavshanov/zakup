@@ -15,6 +15,9 @@ from fastapi import APIRouter, Depends, FastAPI
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
 
+from zakup.modules.analytics.api.router import router as analytics_router
+from zakup.modules.analytics.application.reports import Reports
+from zakup.modules.analytics.infrastructure.readers import SqlAnalyticsReader
 from zakup.modules.catalog.api.router import router as catalog_router
 from zakup.modules.catalog.application.iiko_sync import IikoCatalogSync
 from zakup.modules.catalog.application.offers import AddOffer, ArchiveOffer, GetPriceHistory, ReviseOffer
@@ -190,6 +193,7 @@ ROUTERS: tuple[APIRouter, ...] = (
     procurement_public_router,
     receiving_router,
     finance_router,
+    analytics_router,
 )
 
 T = TypeVar("T")
@@ -230,6 +234,9 @@ def wire(
     _wire_procurement(overrides, per_request, settings)
     _wire_receiving(overrides, per_request, settings)
     _wire_finance(overrides, per_request, settings)
+    overrides[Stub(Reports)] = per_request(
+        lambda s: Reports(SqlAnalyticsReader(s), window_days=settings.demand_window_days)
+    )
 
 
 def _wire_identity(

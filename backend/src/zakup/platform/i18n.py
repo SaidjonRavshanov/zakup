@@ -370,6 +370,12 @@ MESSAGES: Final[dict[str, dict[Locale, str]]] = {
         "uz": "O'zingizdan administrator rolini olib bo'lmaydi",
         "ru": "Нельзя снять роль администратора с самого себя",
     },
+    # ---- analytics
+    "invalid_report": {"uz": "Hisobot parametrlari noto'g'ri", "ru": "Некорректные параметры отчёта"},
+    "analytics.period_range": {
+        "uz": "Davr noto'g'ri: boshlanishi tugashidan oldin va {max} kundan oshmasin",
+        "ru": "Некорректный период: начало раньше конца и не длиннее {max} дней",
+    },
     # ---- finance (to'lovlar)
     "invalid_payment": {"uz": "To'lov ma'lumotlari noto'g'ri", "ru": "Некорректные данные оплаты"},
     "payment.not_found": {"uz": "To'lov zayavkasi topilmadi", "ru": "Заявка на оплату не найдена"},
