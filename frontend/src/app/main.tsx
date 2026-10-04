@@ -6,6 +6,7 @@ import { initI18n } from '@/shared/i18n'
 import { telegram } from '@/shared/lib/telegram'
 import { detectPerformanceMode } from '@/shared/lib/theme'
 import { initTheme } from '@/shared/lib/use-theme'
+import { startOutbox } from '@/shared/offline/outbox'
 import { Root } from './Root'
 import './styles/index.css'
 
@@ -13,6 +14,7 @@ telegram.init()
 detectPerformanceMode()
 initTheme()
 initI18n()
+startOutbox()
 
 const root = document.getElementById('root')
 if (!root) throw new Error('#root topilmadi')

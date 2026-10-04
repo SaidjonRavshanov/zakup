@@ -82,6 +82,12 @@ const requestRoutes = [
   }),
 ] as const
 
+const receiptRoute = createRoute({
+  getParentRoute: () => shellRoute,
+  path: '/receiving/receipts/$receiptId',
+  component: lazyRouteComponent(() => import('@/pages/receiving/ReceiptPage')),
+})
+
 const iikoRoute = createRoute({
   getParentRoute: () => shellRoute,
   path: '/admin/iiko',
@@ -149,7 +155,7 @@ const devUiRoute = createRoute({
 })
 
 const routeTree = rootRoute.addChildren([
-  shellRoute.addChildren([dashboardRoute, ordersRoute, receivingRoute, receiveOrderRoute, profileRoute, usersRoute, userEditRoute, iikoRoute, ...requestRoutes, catalogRoute, ...catalogRoutes, devUiRoute]),
+  shellRoute.addChildren([dashboardRoute, ordersRoute, receivingRoute, receiveOrderRoute, profileRoute, usersRoute, userEditRoute, iikoRoute, receiptRoute, ...requestRoutes, catalogRoute, ...catalogRoutes, devUiRoute]),
 ])
 
 export const router = createRouter({

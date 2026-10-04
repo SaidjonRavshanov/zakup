@@ -27,6 +27,7 @@ from zakup.modules.receiving.domain.receipt import (
     Resolution,
 )
 from zakup.platform.di import Stub
+from zakup.platform.i18n import negotiate_locale, translate
 from zakup.platform.security import CurrentPrincipal
 
 router = APIRouter(prefix="/receiving", tags=["receiving"])
@@ -220,9 +221,13 @@ async def list_receipts(
 
 @router.get("/receipts/{receipt_id}")
 async def get_receipt(
-    receipt_id: UUID, actor: CurrentPrincipal, use_case: Annotated[GetReceipt, use(GetReceipt)]
+    receipt_id: UUID, request: Request, actor: CurrentPrincipal, use_case: Annotated[GetReceipt, use(GetReceipt)]
 ) -> ReceiptDetailOut:
-    return ReceiptDetailOut.model_validate(await use_case(actor, receipt_id))
+    out = ReceiptDetailOut.model_validate(await use_case(actor, receipt_id))
+    if out.export_error:
+        # Eksport xatosi i18n kaliti bo'lib saqlanadi (masalan, iiko.supplier_not_linked) — so'rov tilida
+        out.export_error = translate(out.export_error, negotiate_locale(request.headers.get("accept-language")))
+    return out
 
 
 @router.post("/receipts/{receipt_id}/resolve", status_code=status.HTTP_204_NO_CONTENT)
