@@ -16,7 +16,7 @@ import structlog
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncEngine
 
-from zakup.modules.integration_iiko.application.ports import IikoReader, ServerInfo
+from zakup.modules.integration_iiko.application.ports import IikoSession, ServerInfo
 from zakup.modules.integration_iiko.domain.models import (
     IikoDepartment,
     IikoIncomingInvoice,
@@ -25,6 +25,8 @@ from zakup.modules.integration_iiko.domain.models import (
     IikoStore,
     IikoSupplier,
     IikoUnit,
+    ImportResult,
+    IncomingInvoiceDraft,
 )
 from zakup.modules.integration_iiko.infrastructure import parsers
 from zakup.settings import IikoServerSettings
@@ -106,6 +108,21 @@ class _HttpReader:
     async def suppliers(self) -> list[IikoSupplier]:
         return await self._get("/suppliers", parsers.parse_suppliers)
 
+    async def import_incoming_invoice(self, draft: IncomingInvoiceDraft) -> ImportResult:
+        try:
+            response = await self._http.post(
+                "/documents/import/incomingInvoice",
+                params={"key": self._key},
+                content=parsers.render_incoming_invoice(draft),
+                headers={"Content-Type": "application/xml"},
+            )
+        except httpx.TransportError as exc:
+            raise IikoUnavailableError("iiko.unavailable") from exc
+        if response.status_code != 200:  # noqa: PLR2004
+            log.warning("iiko_import_bad_status", status=response.status_code, body=response.text[:500])
+            raise IikoUnavailableError("iiko.bad_status", status=response.status_code)
+        return parsers.parse_import_result(response.content)
+
     async def incoming_invoices(self, date_from: date, date_to: date) -> list[IikoIncomingInvoice]:
         return await self._get(
             "/documents/export/incomingInvoice",
@@ -132,7 +149,7 @@ class HttpIikoGateway:
         return [ServerInfo(s.code, s.name, s.department_code) for s in self._servers.values()]
 
     @asynccontextmanager
-    async def session(self, server_code: str) -> AsyncIterator[IikoReader]:
+    async def session(self, server_code: str) -> AsyncIterator[IikoSession]:
         config = self._servers.get(server_code)
         if config is None:
             raise NotFoundError("iiko.server_not_found")

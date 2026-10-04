@@ -65,6 +65,16 @@ class Settings(BaseSettings):
     public_base_url: str = "http://127.0.0.1:5173"
     company_name: str = "Tarnov"
 
+    # Qabul dopusklari (WORKFLOW B9): vaznli tovar %, donali %, narx oshishi %
+    receiving_qty_weight_pct: Decimal = Decimal(3)
+    receiving_qty_piece_pct: Decimal = Decimal(0)
+    receiving_price_pct: Decimal = Decimal(3)
+    # Fayllar (nakladnoy fotosi) — lokal papka; production'da S3
+    media_dir: str = "var/media"
+    # iiko kirimi: o'tkazilgan holda (Tarnov amaliyoti); nizo bo'lgan qabul — o'tkazilmagan, buxgalter tekshiradi
+    iiko_post_invoices: bool = True
+    iiko_post_disputed: bool = False
+
     cors_origins: list[str] = ["http://localhost:5173", "http://127.0.0.1:5173"]
 
 

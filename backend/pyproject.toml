@@ -56,7 +56,7 @@ known-first-party = ["zakup", "tests"]
 "src/zakup/modules/integration_iiko/domain/mapping.py" = ["RUF001"]
 # Yetkazuvchiga ruscha xabar shabloni
 "src/zakup/modules/procurement/application/message.py" = ["RUF001"]
-"tests/**" = ["PLR2004", "S105", "S106", "RUF001"]
+"tests/**" = ["PLR2004", "S105", "S106", "RUF001", "RUF003"]
 "alembic/**" = ["N999"]
 
 # ---------------------------------------------------------------- mypy
@@ -96,6 +96,7 @@ containers = [
     "zakup.modules.identity",
     "zakup.modules.integration_iiko",
     "zakup.modules.procurement",
+    "zakup.modules.receiving",
 ]
 # api va infrastructure bir-birini bilmaydi: ular bootstrap.py (composition root) da ulanadi
 layers = ["api | infrastructure", "application", "domain"]
@@ -109,6 +110,28 @@ forbidden_modules = ["zakup.modules.*.infrastructure", "zakup.modules.*.api", "f
 [[tool.importlinter.contracts]]
 name = "Modullar bir-birining faqat application qatlamini chaqiradi (ARCHITECTURE §3.1)"
 type = "forbidden"
-source_modules = ["zakup.modules.integration_iiko", "zakup.modules.procurement"]
-forbidden_modules = ["zakup.modules.catalog.domain", "zakup.modules.catalog.infrastructure", "zakup.modules.catalog.api"]
+source_modules = ["zakup.modules.integration_iiko", "zakup.modules.procurement", "zakup.modules.receiving"]
+forbidden_modules = [
+    "zakup.modules.catalog.domain",
+    "zakup.modules.catalog.infrastructure",
+    "zakup.modules.catalog.api",
+]
+allow_indirect_imports = true
+
+[[tool.importlinter.contracts]]
+name = "receiving / integration_iiko boshqa modullarning faqat application qatlamini chaqiradi"
+type = "forbidden"
+source_modules = ["zakup.modules.receiving", "zakup.modules.integration_iiko"]
+forbidden_modules = [
+    "zakup.modules.procurement.domain",
+    "zakup.modules.procurement.infrastructure",
+    "zakup.modules.procurement.api",
+]
+allow_indirect_imports = true
+
+[[tool.importlinter.contracts]]
+name = "integration_iiko receiving'ning faqat application qatlamini chaqiradi"
+type = "forbidden"
+source_modules = ["zakup.modules.integration_iiko"]
+forbidden_modules = ["zakup.modules.receiving.domain", "zakup.modules.receiving.infrastructure", "zakup.modules.receiving.api"]
 allow_indirect_imports = true

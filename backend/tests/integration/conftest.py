@@ -1,6 +1,7 @@
 """Integratsion testlar: haqiqiy PostgreSQL (zakup_test), migratsiyalar Alembic orqali."""
 
 import os
+import tempfile
 from collections.abc import AsyncIterator
 from pathlib import Path
 
@@ -16,6 +17,7 @@ from zakup.settings import IikoServerSettings, Settings
 
 TEST_DB_URL = os.environ.get("ZAKUP_TEST_DATABASE_URL", "postgresql+asyncpg://postgres@127.0.0.1:5432/zakup_test")
 BACKEND_DIR = Path(__file__).resolve().parents[2]
+MEDIA_DIR = Path(tempfile.gettempdir()) / "zakup-test-media"
 ADMIN_TELEGRAM_ID = 1001
 BOT_TOKEN = "123456:TEST-bot-token"
 FAKE_IIKO_SERVERS = [
@@ -63,6 +65,7 @@ def settings() -> Settings:
         database_url=TEST_DB_URL,  # type: ignore[arg-type]
         dev_auth_bypass=True,
         bootstrap_admin_ids=[ADMIN_TELEGRAM_ID],
+        media_dir=str(MEDIA_DIR),
         telegram_bot_token=BOT_TOKEN,  # type: ignore[arg-type]
         iiko_servers=FAKE_IIKO_SERVERS,
     )
@@ -89,7 +92,8 @@ async def _clean_tables() -> AsyncIterator[None]:
             text(
                 "TRUNCATE catalog.suppliers, catalog.stores, catalog.products, catalog.product_categories,"
                 " catalog.branches, platform.outbox, identity.users, iiko.links, iiko.sync_runs,"
-                " procurement.purchase_requests, procurement.purchase_orders CASCADE"
+                " procurement.purchase_requests, procurement.purchase_orders, receiving.attachments,"
+                " iiko.invoice_exports CASCADE"
             )
         )
     await engine.dispose()

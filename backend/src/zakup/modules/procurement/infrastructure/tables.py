@@ -23,7 +23,16 @@ request_number_seq = Sequence("request_number_seq", schema="procurement", metada
 order_number_seq = Sequence("order_number_seq", schema="procurement", metadata=metadata)
 
 REQUEST_STATUSES = ("DRAFT", "PENDING_APPROVAL", "APPROVED", "PARTIALLY_APPROVED", "REJECTED", "CANCELLED", "SPLIT")
-ORDER_STATUSES = ("CREATED", "SENT", "CONFIRMED", "PARTIALLY_CONFIRMED", "REAPPROVAL", "CANCELLED")
+ORDER_STATUSES = (
+    "CREATED",
+    "SENT",
+    "CONFIRMED",
+    "PARTIALLY_CONFIRMED",
+    "REAPPROVAL",
+    "RECEIVED",
+    "PARTIALLY_RECEIVED",
+    "CANCELLED",
+)
 
 
 def _in(values: tuple[str, ...]) -> str:

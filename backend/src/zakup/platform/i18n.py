@@ -232,6 +232,64 @@ MESSAGES: Final[dict[str, dict[Locale, str]]] = {
         "uz": "Havola yaroqsiz yoki muddati o'tgan",
         "ru": "Ссылка недействительна или устарела",
     },
+    "order.not_receivable": {
+        "uz": "Bu buyurtmani hozir qabul qilib bo'lmaydi (holati: {status})",
+        "ru": "Этот заказ сейчас нельзя принять (статус: {status})",
+    },
+    # --- receiving
+    "invalid_receipt": {"uz": "Qabul ma'lumotlari noto'g'ri", "ru": "Некорректные данные приёмки"},
+    "receipt.not_found": {"uz": "Qabul topilmadi", "ru": "Приёмка не найдена"},
+    "receipt.modified": {
+        "uz": "Qabul boshqa foydalanuvchi tomonidan o'zgartirilgan",
+        "ru": "Приёмка изменена другим пользователем",
+    },
+    "receipt.id_reused": {
+        "uz": "Bu qabul ID'si boshqa buyurtma uchun ishlatilgan",
+        "ru": "Этот ID приёмки уже использован для другого заказа",
+    },
+    "receipt.order_already_received": {"uz": "Bu buyurtma allaqachon qabul qilingan", "ru": "Этот заказ уже принят"},
+    "receipt.photo_required": {
+        "uz": "Nakladnoy fotosisiz qabulni yakunlab bo'lmaydi",
+        "ru": "Без фото накладной приёмку завершить нельзя",
+    },
+    "receipt.unknown_line": {"uz": "Buyurtmada bunday pozitsiya yo'q", "ru": "В заказе нет такой позиции"},
+    "receipt.negative": {
+        "uz": "Miqdor va narx manfiy bo'lmasin",
+        "ru": "Количество и цена не могут быть отрицательными",
+    },
+    "receipt.defect_range": {
+        "uz": "Brak miqdori 0 dan qabul qilingan miqdorgacha",
+        "ru": "Брак — от 0 до принятого количества",
+    },
+    "receipt.defect_reason_required": {"uz": "Brak sababini yozing", "ru": "Укажите причину брака"},
+    "receipt.no_open_dispute": {"uz": "Ochiq nizo yo'q", "ru": "Нет открытого спора"},
+    "receipt.comment_required": {"uz": "Izoh yozing", "ru": "Напишите комментарий"},
+    "receipt.file_type": {
+        "uz": "Faqat rasm (JPEG, PNG, WebP) yoki PDF",
+        "ru": "Только изображение (JPEG, PNG, WebP) или PDF",
+    },
+    "receipt.file_size": {"uz": "Fayl {max_mb} MB dan oshmasin", "ru": "Файл не больше {max_mb} МБ"},
+    "receipt.file_not_found": {"uz": "Fayl topilmadi", "ru": "Файл не найден"},
+    # --- iiko kirimi
+    "iiko_mapping": {"uz": "iiko'da mos ma'lumot topilmadi", "ru": "В iiko не найдено соответствие"},
+    "iiko.receipt_not_ready": {"uz": "Qabul eksportga tayyor emas", "ru": "Приёмка не готова к выгрузке"},
+    "iiko.no_server_for_store": {
+        "uz": "Ombor filiali uchun iiko serveri sozlanmagan",
+        "ru": "Для филиала склада не настроен сервер iiko",
+    },
+    "iiko.store_not_linked": {
+        "uz": "Ombor iiko bilan bog'lanmagan — ma'lumotnomani sinxronlang",
+        "ru": "Склад не связан с iiko — синхронизируйте справочники",
+    },
+    "iiko.product_not_linked": {
+        "uz": "Tovar iiko'da topilmadi — ma'lumotnomani sinxronlang",
+        "ru": "Товар не найден в iiko — синхронизируйте справочники",
+    },
+    "iiko.supplier_not_linked": {
+        "uz": "Yetkazuvchi iiko'da topilmadi — ma'lumotnomani sinxronlang",
+        "ru": "Поставщик не найден в iiko — синхронизируйте справочники",
+    },
+    "iiko.import_rejected": {"uz": "iiko nakladnoyni qabul qilmadi: {error}", "ru": "iiko отклонил накладную: {error}"},
     # --- iiko
     "iiko_unavailable": {"uz": "iiko serveri javob bermayapti", "ru": "Сервер iiko не отвечает"},
     "iiko.unavailable": {

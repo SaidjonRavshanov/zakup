@@ -31,6 +31,14 @@ class SqlLinks:
         result: UUID | None = await self._session.scalar(query)
         return result
 
+    async def iiko_ids(self, server: str, kind: EntityKind, local_id: UUID) -> list[tuple[UUID, dict[str, Any]]]:
+        query = (
+            select(links.c.iiko_id, links.c.attrs)
+            .where(links.c.server_code == server, links.c.kind == kind.value, links.c.local_id == local_id)
+            .order_by(links.c.updated_at.desc())
+        )
+        return [(row.iiko_id, row.attrs) for row in await self._session.execute(query)]
+
     async def save(
         self,
         server: str,

@@ -9,10 +9,13 @@ Sessiyalar kuzatiladi: bir vaqtdagi maksimal soni va yopilmay qolganlari — "se
 import hashlib
 import os
 import secrets
+import uuid
 from dataclasses import dataclass, field
 from pathlib import Path
+from xml.etree import ElementTree
 
-from fastapi import FastAPI, HTTPException, Query, Response
+from defusedxml.ElementTree import fromstring as safe_fromstring
+from fastapi import FastAPI, HTTPException, Query, Request, Response
 
 FIXTURES = Path(__file__).resolve().parents[1] / "fixtures" / "iiko"
 
@@ -35,6 +38,7 @@ class FakeIikoState:
     peak_sessions: int = 0
     opened: int = 0
     requests: list[str] = field(default_factory=list)
+    imported: list[bytes] = field(default_factory=list)  # POST qilingan kirim nakladnoylari (XML)
 
 
 def create_fake_iiko(data_dir: Path = FIXTURES, state: FakeIikoState | None = None) -> FastAPI:
@@ -62,9 +66,30 @@ def create_fake_iiko(data_dir: Path = FIXTURES, state: FakeIikoState | None = No
             if key not in state.active:
                 raise HTTPException(401, "Token is expired or invalid")
             state.requests.append(path)
-            return Response((data_dir / filename).read_bytes(), media_type=f"{media_type};charset=UTF-8")
+            content = (data_dir / filename).read_bytes()
+            if filename == "incoming_invoices.xml" and state.imported:
+                # Yuborilganlar ham eksportda ko'rinadi (idempotentlik tekshiruvi uchun)
+                root = safe_fromstring(content)
+                root.extend(safe_fromstring(doc) for doc in state.imported)
+                content = ElementTree.tostring(root, encoding="utf-8")
+            return Response(content, media_type=f"{media_type};charset=UTF-8")
 
         return handler
+
+    @app.post("/resto/api/documents/import/incomingInvoice")
+    async def import_invoice(key: str, request: Request) -> Response:
+        if key not in state.active:
+            raise HTTPException(401, "Token is expired or invalid")
+        document = safe_fromstring(await request.body())
+        # iiko hujjatga o'zi ID beradi (eksportda <id> bo'ladi)
+        ElementTree.SubElement(document, "id").text = str(uuid.uuid4())
+        state.imported.append(ElementTree.tostring(document, encoding="utf-8"))
+        number = document.findtext("documentNumber") or ""
+        xml = (
+            "<documentValidationResult><valid>true</valid><warning>false</warning>"
+            f"<documentNumber>{number}</documentNumber><errorMessage/></documentValidationResult>"
+        )
+        return Response(xml, media_type="application/xml")
 
     for path, (filename, media_type) in _FILES.items():
         app.add_api_route(path, make_handler(filename, media_type, path), methods=["GET"])

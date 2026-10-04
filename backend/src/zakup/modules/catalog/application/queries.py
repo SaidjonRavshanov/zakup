@@ -10,6 +10,7 @@ from uuid import UUID
 
 from zakup.modules.catalog.application.dto import Labels
 from zakup.modules.catalog.application.ports import (
+    BranchRepository,
     LabelReader,
     OfferRepository,
     OffersByProduct,
@@ -59,6 +60,7 @@ class CatalogQueries:
         products: ProductRepository,
         suppliers: SupplierRepository,
         stores: StoreRepository,
+        branches: BranchRepository,
         cards: PurchaseCardRepository,
         offers_by_product: OffersByProduct,
         labels: LabelReader,
@@ -67,6 +69,7 @@ class CatalogQueries:
         self._products = products
         self._suppliers = suppliers
         self._stores = stores
+        self._branches = branches
         self._cards = cards
         self._offers_by_product = offers_by_product
         self._labels = labels
@@ -104,6 +107,14 @@ class CatalogQueries:
     async def store_available(self, store_id: UUID) -> bool:
         store = await self._stores.get(store_id)
         return store is not None and not store.is_archived
+
+    async def store_branch_code(self, store_id: UUID) -> str | None:
+        """Ombor qaysi filialda (iiko bo'lim kodi) — kirim qaysi iiko serveriga ketishini aniqlaydi."""
+        store = await self._stores.get(store_id)
+        if store is None or store.branch_id is None:
+            return None
+        branch = await self._branches.get(store.branch_id)
+        return branch.code if branch else None
 
     async def supplier_terms(self, supplier_id: UUID) -> SupplierTerms | None:
         supplier = await self._suppliers.get(supplier_id)

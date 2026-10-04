@@ -5,7 +5,9 @@ Yangi modul qo'shish: router'ni `ROUTERS` ga, provider'larni `_wire_*` ga qo'shi
 
 from collections.abc import AsyncIterator, Callable
 from contextlib import asynccontextmanager
+from pathlib import Path
 from typing import Annotated, Any, Protocol, TypeVar
+from uuid import UUID
 
 from fastapi import APIRouter, Depends, FastAPI
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
@@ -72,10 +74,17 @@ from zakup.modules.identity.infrastructure.auth_adapters import (
 )
 from zakup.modules.identity.infrastructure.repositories import SqlUserReader, SqlUserRepository
 from zakup.modules.integration_iiko.api.router import router as iiko_router
+from zakup.modules.integration_iiko.application.exports import (
+    EnqueueInvoiceExport,
+    ExportNextInvoice,
+    ExportScope,
+    ExportSettings,
+)
 from zakup.modules.integration_iiko.application.runs import ListSyncRuns, RequestSync, SyncScope
 from zakup.modules.integration_iiko.application.sync import ImportPurchasePrices, SyncReferences
 from zakup.modules.integration_iiko.infrastructure.catalog_adapter import CatalogSyncAdapter
 from zakup.modules.integration_iiko.infrastructure.client import HttpIikoGateway, PgAdvisoryLock
+from zakup.modules.integration_iiko.infrastructure.exports import BranchAdapter, ReceiptsAdapter, SqlExportQueue
 from zakup.modules.integration_iiko.infrastructure.repositories import SqlLinks, SqlSyncRunReader, SqlSyncRuns
 from zakup.modules.procurement.api.router import public_router as procurement_public_router
 from zakup.modules.procurement.api.router import router as procurement_router
@@ -90,6 +99,7 @@ from zakup.modules.procurement.application.orders import (
     SendOrder,
     SupplierRespond,
 )
+from zakup.modules.procurement.application.receiving_facade import OrderReceiving
 from zakup.modules.procurement.application.requests import (
     AddRequestLine,
     ApproveRequest,
@@ -114,6 +124,25 @@ from zakup.modules.procurement.infrastructure.repositories import (
     SqlRequestRepository,
     SqlResponseTokens,
 )
+from zakup.modules.receiving.api.router import router as receiving_router
+from zakup.modules.receiving.application.exports import ReceiptExports
+from zakup.modules.receiving.application.use_cases import (
+    GetAttachment,
+    GetOrderToReceive,
+    GetReceipt,
+    ListReceipts,
+    ResolveDispute,
+    SubmitReceipt,
+    UploadAttachment,
+)
+from zakup.modules.receiving.domain.receipt import ReceivingTolerance
+from zakup.modules.receiving.infrastructure.adapters import LabelsAdapter, OrdersAdapter
+from zakup.modules.receiving.infrastructure.readers import SqlReceiptReader
+from zakup.modules.receiving.infrastructure.repositories import (
+    LocalAttachments,
+    SqlExportStore,
+    SqlReceiptRepository,
+)
 from zakup.platform.access_tokens import AccessTokenCodec, InvalidAccessTokenError
 from zakup.platform.di import Stub
 from zakup.platform.health import router as health_router
@@ -130,6 +159,7 @@ ROUTERS: tuple[APIRouter, ...] = (
     iiko_router,
     procurement_router,
     procurement_public_router,
+    receiving_router,
 )
 
 T = TypeVar("T")
@@ -168,6 +198,7 @@ def wire(
     _wire_catalog(overrides, per_request)
     _wire_iiko(overrides, per_request, build_iiko_gateway(settings, engine))
     _wire_procurement(overrides, per_request, settings)
+    _wire_receiving(overrides, per_request, settings)
 
 
 def _wire_identity(
@@ -322,19 +353,22 @@ def _wire_iiko(overrides: Overrides, per_request: PerRequest, gateway: HttpIikoG
 # ---------------------------------------------------------------- procurement
 
 
-def catalog_port(session: AsyncSession) -> CatalogAdapter:
-    """procurement → catalog public interfeysi (bitta sessiyada)."""
-    return CatalogAdapter(
-        CatalogQueries(
-            offers=SqlOfferRepository(session),
-            products=SqlProductRepository(session),
-            suppliers=SqlSupplierRepository(session),
-            stores=SqlStoreRepository(session),
-            cards=SqlPurchaseCardRepository(session),
-            offers_by_product=SqlOffersByProduct(session),
-            labels=SqlLabelReader(session),
-        )
+def catalog_queries(session: AsyncSession) -> CatalogQueries:
+    """catalog public interfeysi — boshqa modullar adapterlari shu orqali (bitta sessiyada)."""
+    return CatalogQueries(
+        offers=SqlOfferRepository(session),
+        products=SqlProductRepository(session),
+        suppliers=SqlSupplierRepository(session),
+        stores=SqlStoreRepository(session),
+        branches=SqlBranchRepository(session),
+        cards=SqlPurchaseCardRepository(session),
+        offers_by_product=SqlOffersByProduct(session),
+        labels=SqlLabelReader(session),
     )
+
+
+def catalog_port(session: AsyncSession) -> CatalogAdapter:
+    return CatalogAdapter(catalog_queries(session))
 
 
 def _wire_procurement(overrides: Overrides, per_request: PerRequest, settings: Settings) -> None:
@@ -377,3 +411,73 @@ def _wire_procurement(overrides: Overrides, per_request: PerRequest, settings: S
     }
     for use_case, build in providers.items():
         overrides[Stub(use_case)] = per_request(build)
+
+
+# ---------------------------------------------------------------- receiving
+
+
+def orders_for_receiving(session: AsyncSession) -> OrdersAdapter:
+    return OrdersAdapter(OrderReceiving(SqlOrderRepository(session), catalog_port(session)))
+
+
+def _wire_receiving(overrides: Overrides, per_request: PerRequest, settings: Settings) -> None:
+    tolerance = ReceivingTolerance(
+        qty_weight_pct=settings.receiving_qty_weight_pct,
+        qty_piece_pct=settings.receiving_qty_piece_pct,
+        price_pct=settings.receiving_price_pct,
+    )
+    media = Path(settings.media_dir)
+
+    def uow(session: AsyncSession) -> SqlAlchemyUnitOfWork:
+        return SqlAlchemyUnitOfWork(session)
+
+    providers: dict[type, Callable[[AsyncSession], Any]] = {
+        GetOrderToReceive: lambda s: GetOrderToReceive(orders_for_receiving(s)),
+        SubmitReceipt: lambda s: SubmitReceipt(
+            uow(s), SqlReceiptRepository(s), orders_for_receiving(s), LocalAttachments(s, media), tolerance=tolerance
+        ),
+        ResolveDispute: lambda s: ResolveDispute(uow(s), SqlReceiptRepository(s)),
+        UploadAttachment: lambda s: UploadAttachment(uow(s), LocalAttachments(s, media)),
+        GetAttachment: lambda s: GetAttachment(LocalAttachments(s, media)),
+        ListReceipts: lambda s: ListReceipts(SqlReceiptReader(s), LabelsAdapter(catalog_queries(s))),
+        GetReceipt: lambda s: GetReceipt(SqlReceiptReader(s), LabelsAdapter(catalog_queries(s))),
+    }
+    for use_case, build in providers.items():
+        overrides[Stub(use_case)] = per_request(build)
+
+
+# ---------------------------------------------------------------- worker: outbox va iiko kirimi
+
+
+def _receipts_port(session: AsyncSession) -> ReceiptsAdapter:
+    return ReceiptsAdapter(ReceiptExports(SqlExportStore(session)))
+
+
+def outbox_handlers() -> dict[str, Callable[[AsyncSession, dict[str, Any]], Any]]:
+    """Event → modul reaksiyasi (ARCHITECTURE §3.1.2): receiving ular haqida hech narsa bilmaydi."""
+
+    async def enqueue_invoice(session: AsyncSession, payload: dict[str, Any]) -> None:
+        await EnqueueInvoiceExport(SqlExportQueue(session), _receipts_port(session))(UUID(payload["aggregate_id"]))
+
+    return {"receiving.receipt_accepted": enqueue_invoice}
+
+
+def build_invoice_exporter(
+    settings: Settings, gateway: HttpIikoGateway, session_factory: async_sessionmaker[AsyncSession]
+) -> ExportNextInvoice:
+    @asynccontextmanager
+    async def scope() -> AsyncIterator[ExportScope]:
+        async with session_factory() as session:
+            yield ExportScope(
+                queue=SqlExportQueue(session),
+                receipts=_receipts_port(session),
+                branches=BranchAdapter(catalog_queries(session)),
+                links=SqlLinks(session),
+                commit=session.commit,
+            )
+
+    return ExportNextInvoice(
+        gateway,
+        scope,
+        ExportSettings(post_processed=settings.iiko_post_invoices, disputed_processed=settings.iiko_post_disputed),
+    )

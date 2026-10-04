@@ -17,6 +17,8 @@ from zakup.modules.integration_iiko.domain.models import (
     IikoStore,
     IikoSupplier,
     IikoUnit,
+    ImportResult,
+    IncomingInvoiceDraft,
 )
 
 
@@ -38,6 +40,14 @@ class IikoReader(Protocol):
     async def incoming_invoices(self, date_from: date, date_to: date) -> list[IikoIncomingInvoice]: ...
 
 
+class IikoInvoiceWriter(Protocol):
+    async def import_incoming_invoice(self, draft: IncomingInvoiceDraft) -> ImportResult:
+        """POST — avtomatik qayta urinishsiz (dublikat xavfi): qayta urinish oldidan raqam bo'yicha qidiriladi."""
+
+
+class IikoSession(IikoReader, IikoInvoiceWriter, Protocol): ...
+
+
 @dataclass(frozen=True, slots=True)
 class ServerInfo:
     code: str
@@ -48,7 +58,7 @@ class ServerInfo:
 class IikoGateway(Protocol):
     def servers(self) -> list[ServerInfo]: ...
 
-    def session(self, server_code: str) -> AbstractAsyncContextManager[IikoReader]:
+    def session(self, server_code: str) -> AbstractAsyncContextManager[IikoSession]:
         """auth → (blok: bitta sessiya serverga) → ... → logout (har doim)."""
 
 
@@ -69,6 +79,9 @@ class Links(Protocol):
 
     async def local_id_by_key(self, kind: EntityKind, key: str) -> UUID | None:
         """Tabiiy kalit bo'yicha (yetkazuvchi: normallashtirilgan nom)."""
+
+    async def iiko_ids(self, server: str, kind: EntityKind, local_id: UUID) -> list[tuple[UUID, dict[str, Any]]]:
+        """Teskari: bizning ID → shu serverdagi iiko GUID'lar (yetkazuvchida — НАЛ/ПЕР kartochkalari)."""
 
     async def save(
         self,

@@ -1,4 +1,4 @@
-from sqlalchemy import CheckConstraint, Column, DateTime, Index, PrimaryKeyConstraint, Table, Text, func, text
+from sqlalchemy import CheckConstraint, Column, DateTime, Index, Integer, PrimaryKeyConstraint, Table, Text, func, text
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 
 from zakup.platform.db import metadata
@@ -40,5 +40,22 @@ sync_runs = Table(
     CheckConstraint("status IN ('queued', 'running', 'done', 'failed')", name="status"),
     Index("ix_sync_runs_queued", "created_at", postgresql_where=text("status = 'queued'")),
     Index("ix_sync_runs_server_created", "server_code", "created_at"),
+    schema="iiko",
+)
+
+# Qabul → iiko kirim navbati (DATABASE §2.7 invoice_exports): receipt_id unikal — bitta qabul, bitta kirim
+invoice_exports = Table(
+    "invoice_exports",
+    metadata,
+    Column("receipt_id", UUID(as_uuid=True), primary_key=True),
+    Column("status", Text, nullable=False, server_default="queued"),
+    Column("attempts", Integer, nullable=False, server_default="0"),
+    Column("next_attempt_at", DateTime(timezone=True), nullable=False, server_default=func.now()),
+    Column("last_error", Text),
+    Column("document_number", Text),
+    Column("created_at", DateTime(timezone=True), nullable=False, server_default=func.now()),
+    Column("updated_at", DateTime(timezone=True), nullable=False, server_default=func.now()),
+    CheckConstraint("status IN ('queued', 'running', 'done', 'failed')", name="status"),
+    Index("ix_invoice_exports_due", "next_attempt_at", postgresql_where=text("status IN ('queued', 'failed')")),
     schema="iiko",
 )

@@ -107,3 +107,33 @@ class IikoIncomingInvoice:
     @property
     def is_processed(self) -> bool:
         return self.status == "PROCESSED"
+
+
+@dataclass(frozen=True, slots=True)
+class InvoiceDraftItem:
+    product_id: UUID  # iiko GUID
+    store_id: UUID  # iiko GUID
+    amount: Decimal  # mahsulotning asosiy birligida
+    price: Decimal
+    total: Decimal
+
+
+@dataclass(frozen=True, slots=True)
+class IncomingInvoiceDraft:
+    """iiko'ga yuboriladigan kirim nakladnoyi (documents/import/incomingInvoice) — FAKT bo'yicha (WORKFLOW B10)."""
+
+    document_number: str  # bizning qabul raqami — idempotentlik: qayta yuborishdan oldin shu raqam qidiriladi
+    incoming_at: str  # ISO, iiko serveri vaqti bo'yicha
+    supplier_id: UUID
+    store_id: UUID
+    supplier_invoice_no: str | None
+    comment: str
+    processed: bool  # True — darhol o'tkaziladi; False — buxgalter tekshiradi
+    items: tuple[InvoiceDraftItem, ...]
+
+
+@dataclass(frozen=True, slots=True)
+class ImportResult:
+    valid: bool
+    document_number: str | None
+    error: str | None

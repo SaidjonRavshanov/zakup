@@ -1,7 +1,7 @@
 """Fon ishlari: `python -m zakup.entrypoints.worker`.
 
-Hozircha — iiko sinxronizatsiya navbati (iiko.sync_runs). iiko bilan faqat shu process gaplashadi (ADR-05);
-bir nechta worker ishga tushirilsa ham har serverga bitta sessiya — PostgreSQL advisory lock.
+Har aylanishda: outbox relay (eventlar → modul reaksiyalari), iiko sinxronizatsiya navbati, qabul → iiko kirimi.
+iiko bilan faqat shu process gaplashadi (ADR-05); bir nechta worker bo'lsa ham serverga bitta sessiya — advisory lock.
 """
 
 import asyncio
@@ -10,10 +10,11 @@ import signal
 
 import structlog
 
-from zakup.bootstrap import build_iiko_gateway, iiko_scope_factory
+from zakup.bootstrap import build_iiko_gateway, build_invoice_exporter, iiko_scope_factory, outbox_handlers
 from zakup.modules.integration_iiko.application.runs import RunNextSync
 from zakup.platform.db import create_engine, create_session_factory
 from zakup.platform.logging import configure_logging
+from zakup.platform.outbox_relay import OutboxRelay
 from zakup.settings import get_settings
 
 POLL_INTERVAL_S = 5.0
@@ -24,7 +25,11 @@ async def main() -> None:
     settings = get_settings()
     configure_logging(json=settings.env == "production")
     engine = create_engine(settings)
-    run_next = RunNextSync(build_iiko_gateway(settings, engine), iiko_scope_factory(create_session_factory(engine)))
+    sessions = create_session_factory(engine)
+    gateway = build_iiko_gateway(settings, engine)
+    relay = OutboxRelay(sessions, outbox_handlers())
+    run_next = RunNextSync(gateway, iiko_scope_factory(sessions))
+    export_next = build_invoice_exporter(settings, gateway, sessions)
 
     stop = asyncio.Event()
     for sig in (signal.SIGINT, signal.SIGTERM):
@@ -34,7 +39,8 @@ async def main() -> None:
     log.info("worker_started", iiko_servers=[s.code for s in settings.iiko_servers])
     try:
         while not stop.is_set():
-            if not await run_next():
+            busy = bool(await relay()) | await run_next() | await export_next()
+            if not busy:
                 with contextlib.suppress(TimeoutError):
                     await asyncio.wait_for(stop.wait(), POLL_INTERVAL_S)
     finally:

@@ -9,7 +9,7 @@ from datetime import date
 from decimal import Decimal, InvalidOperation
 from typing import Any
 from uuid import UUID
-from xml.etree.ElementTree import Element
+from xml.etree.ElementTree import Element, SubElement, tostring
 
 from defusedxml.ElementTree import fromstring
 
@@ -24,6 +24,8 @@ from zakup.modules.integration_iiko.domain.models import (
     IikoStore,
     IikoSupplier,
     IikoUnit,
+    ImportResult,
+    IncomingInvoiceDraft,
 )
 from zakup.shared_kernel.errors import DomainError
 
@@ -199,3 +201,41 @@ def parse_incoming_invoices(payload: bytes) -> list[IikoIncomingInvoice]:
             )
         )
     return invoices
+
+
+def render_incoming_invoice(draft: IncomingInvoiceDraft) -> bytes:
+    """iikoRMS incomingInvoice import DTO (iiko API hujjati bo'yicha; Tarnov serverida hali sinovdan o'tmagan)."""
+    doc = Element("document")
+    items = SubElement(doc, "items")
+    for num, item in enumerate(draft.items, start=1):
+        node = SubElement(items, "item")
+        for tag, value in (
+            ("amount", item.amount),
+            ("product", item.product_id),
+            ("num", num),
+            ("price", item.price),
+            ("sum", item.total),
+            ("store", item.store_id),
+        ):
+            SubElement(node, tag).text = str(value)
+    header: tuple[tuple[str, object], ...] = (
+        ("dateIncoming", draft.incoming_at),
+        ("useDefaultDocumentTime", "false"),
+        ("documentNumber", draft.document_number),
+        ("supplier", draft.supplier_id),
+        ("defaultStore", draft.store_id),
+        ("invoice", draft.supplier_invoice_no or ""),
+        ("comment", draft.comment),
+        ("status", "PROCESSED" if draft.processed else "NEW"),
+    )
+    for tag, header_value in header:
+        SubElement(doc, tag).text = str(header_value)
+    body: bytes = tostring(doc, encoding="unicode").encode()
+    return b'<?xml version="1.0" encoding="UTF-8"?>' + body
+
+
+def parse_import_result(payload: bytes) -> ImportResult:
+    root = _xml(payload)
+    valid = (root.findtext("valid") or "").strip().lower() == "true"
+    error = (root.findtext("errorMessage") or "").strip() or None
+    return ImportResult(valid=valid, document_number=_text(root, "documentNumber"), error=error)

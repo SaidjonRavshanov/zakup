@@ -29,7 +29,13 @@ class OrderStatus(StrEnum):
     CONFIRMED = "CONFIRMED"
     PARTIALLY_CONFIRMED = "PARTIALLY_CONFIRMED"
     REAPPROVAL = "REAPPROVAL"
+    RECEIVED = "RECEIVED"
+    PARTIALLY_RECEIVED = "PARTIALLY_RECEIVED"
     CANCELLED = "CANCELLED"
+
+
+# Qabul qilish mumkin bo'lgan holatlar: javob kelmagan bo'lsa ham tovar kelishi mumkin
+RECEIVABLE = frozenset({OrderStatus.SENT, OrderStatus.CONFIRMED, OrderStatus.PARTIALLY_CONFIRMED})
 
 
 class Channel(StrEnum):
@@ -242,6 +248,29 @@ class PurchaseOrder(AggregateRoot):
         for line in self.lines:
             line.needs_reapproval = False
         self.status = self._status_after_response()
+
+    def mark_received(self, *, complete: bool) -> None:
+        """Qabul yakunlandi (receiving moduli chaqiradi). Bitta buyurtma — bitta qabul (MVP)."""
+        if self.status not in RECEIVABLE:
+            raise InvalidTransitionError("order.invalid_status", status=self.status.value)
+        self.status = OrderStatus.RECEIVED if complete else OrderStatus.PARTIALLY_RECEIVED
+
+    @property
+    def expected_lines(self) -> list[tuple[OrderLine, Decimal, Decimal]]:
+        """(pozitsiya, kutilgan bazaviy miqdor, bazaviy birlik narxi) — yetkazuvchi javobi hisobga olingan."""
+        result = []
+        for line in self.lines:
+            packs = line.qty_confirmed if line.qty_confirmed is not None else line.qty_packs
+            price = line.price_confirmed if line.price_confirmed is not None else line.price_per_pack
+            if packs > 0:
+                result.append(
+                    (
+                        line,
+                        (packs * line.pack_factor).quantize(QTY_EXP, ROUND_HALF_UP),
+                        (price / line.pack_factor).quantize(QTY_EXP, ROUND_HALF_UP),
+                    )
+                )
+        return result
 
     def cancel(self, *, reason: str) -> None:
         self._require(OrderStatus.CREATED, OrderStatus.SENT, OrderStatus.REAPPROVAL)
