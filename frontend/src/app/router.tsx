@@ -88,6 +88,24 @@ const receiptRoute = createRoute({
   component: lazyRouteComponent(() => import('@/pages/receiving/ReceiptPage')),
 })
 
+const financeRoutes = [
+  createRoute({
+    getParentRoute: () => shellRoute,
+    path: '/finance',
+    component: lazyRouteComponent(() => import('@/pages/finance/FinancePage')),
+  }),
+  createRoute({
+    getParentRoute: () => shellRoute,
+    path: '/finance/suppliers/$supplierId',
+    component: lazyRouteComponent(() => import('@/pages/finance/SupplierAccountPage')),
+  }),
+  createRoute({
+    getParentRoute: () => shellRoute,
+    path: '/finance/payments/$paymentId',
+    component: lazyRouteComponent(() => import('@/pages/finance/PaymentPage')),
+  }),
+]
+
 const iikoRoute = createRoute({
   getParentRoute: () => shellRoute,
   path: '/admin/iiko',
@@ -155,7 +173,7 @@ const devUiRoute = createRoute({
 })
 
 const routeTree = rootRoute.addChildren([
-  shellRoute.addChildren([dashboardRoute, ordersRoute, receivingRoute, receiveOrderRoute, profileRoute, usersRoute, userEditRoute, iikoRoute, receiptRoute, ...requestRoutes, catalogRoute, ...catalogRoutes, devUiRoute]),
+  shellRoute.addChildren([dashboardRoute, ordersRoute, receivingRoute, receiveOrderRoute, profileRoute, usersRoute, userEditRoute, iikoRoute, receiptRoute, ...financeRoutes, ...requestRoutes, catalogRoute, ...catalogRoutes, devUiRoute]),
 ])
 
 export const router = createRouter({

@@ -1,7 +1,7 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link } from '@tanstack/react-router'
 import { LogOut } from 'lucide-react'
-import { changeMyLocale, meQuery, setActiveRole, useActiveRole, userRoles } from '@/entities/user'
+import { changeMyLocale, meQuery, setActiveRole, useActiveRole, useHasRole, userRoles } from '@/entities/user'
 import { LanguageSwitch } from '@/features/language-switch'
 import { ThemeSwitch } from '@/features/theme-switch'
 import { forgetDevIdentity, signOut } from '@/shared/api/auth'
@@ -16,6 +16,7 @@ export default function ProfilePage() {
   const role = useActiveRole(me)
   const roles = me ? userRoles(me) : []
   const scoped = me?.grants.some((grant) => grant.store_id !== null) ?? false
+  const isAdmin = useHasRole('admin')
 
   const exit = async () => {
     await signOut().catch(() => undefined)
@@ -70,9 +71,17 @@ export default function ProfilePage() {
         <ThemeSwitch />
       </section>
 
+      {isAdmin && (
+        <Link to="/admin/iiko" className="mt-6 block">
+          <Card index="05/iiko" title={t.profile.iiko} interactive>
+            <p className="mt-2 text-sm text-text-2">{t.profile.iikoHint}</p>
+          </Card>
+        </Link>
+      )}
+
       {import.meta.env.DEV && (
         <Link to="/dev/ui" className="mt-6 block">
-          <Card index="05/Dev" title={t.profile.uiKit} interactive>
+          <Card index="06/Dev" title={t.profile.uiKit} interactive>
             <p className="mt-2 text-sm text-text-2">{t.profile.uiKitHint}</p>
           </Card>
         </Link>

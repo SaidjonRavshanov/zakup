@@ -14,8 +14,8 @@ import {
   type Resolution,
 } from '@/entities/receipt'
 import { useHasRole } from '@/entities/user'
-import { session } from '@/shared/api/session'
 import { describeError } from '@/shared/api/errors'
+import { loadFile } from '@/shared/api/files'
 import { useI18n } from '@/shared/i18n'
 import { cn } from '@/shared/lib/cn'
 import { telegram } from '@/shared/lib/telegram'
@@ -53,13 +53,7 @@ function ReceiptView({ receipt }: { receipt: ReceiptDetail }) {
     },
   })
 
-  // Foto — avtorizatsiya bilan (img src'ga token qo'yib bo'lmaydi) → blob URL
-  const showPhoto = async () => {
-    const response = await fetch(`/api/v1/receiving/attachments/${receipt.invoice_photo_id}`, {
-      headers: { Authorization: `Bearer ${session.accessToken() ?? ''}` },
-    })
-    if (response.ok) setPhotoUrl(URL.createObjectURL(await response.blob()))
-  }
+  const showPhoto = async () => setPhotoUrl((await loadFile(`/receiving/attachments/${receipt.invoice_photo_id}`))?.url ?? null)
   useEffect(() => () => {
     if (photoUrl) URL.revokeObjectURL(photoUrl)
   }, [photoUrl])

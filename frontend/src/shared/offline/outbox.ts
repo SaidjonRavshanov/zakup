@@ -8,6 +8,7 @@
  */
 import { useSyncExternalStore } from 'react'
 import { ApiError, apiRequest } from '@/shared/api/client'
+import { uploadFile } from '@/shared/api/files'
 import { session } from '@/shared/api/session'
 
 const DB_NAME = 'zakup-offline'
@@ -106,7 +107,7 @@ async function send(): Promise<void> {
     try {
       let photoId = item.photoId
       if (!photoId) {
-        photoId = (await uploadPhoto(item.photo, item.photoType)).id
+        photoId = await uploadFile('/receiving/attachments', new Blob([item.photo], { type: item.photoType }))
         await tx('readwrite', (store) => store.put({ ...item, photoId }))
       }
       await apiRequest('/receiving/receipts', { method: 'POST', body: { ...item.payload, invoice_photo_id: photoId } })
@@ -120,26 +121,6 @@ async function send(): Promise<void> {
     }
   }
   await refresh()
-}
-
-async function uploadPhoto(photo: Blob, type: string, retried = false): Promise<{ id: string }> {
-  // Xom tana: multipart'siz (backend Content-Type'dan oladi)
-  const token = session.accessToken()
-  const response = await fetch('/api/v1/receiving/attachments', {
-    method: 'POST',
-    headers: { 'Content-Type': type, ...(token ? { Authorization: `Bearer ${token}` } : {}) },
-    body: photo,
-  })
-  if (response.status === 401 && !retried) {
-    // access token eskirgan — umumiy klient orqali yangilab, bir marta qayta urinamiz
-    await apiRequest('/me')
-    return uploadPhoto(photo, type, true)
-  }
-  if (!response.ok) {
-    const payload = (await response.json().catch(() => null)) as { code?: string; message?: string } | null
-    throw new ApiError(response.status, payload?.code ?? 'http_error', payload?.message ?? response.statusText)
-  }
-  return (await response.json()) as { id: string }
 }
 
 /** Ilova ochilganda: holatni yuklash, ulanish tiklanganda va har 30 s da yuborish. */
