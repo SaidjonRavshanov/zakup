@@ -39,6 +39,21 @@ def bearer(session: dict[str, str]) -> dict[str, str]:
     return {"Authorization": f"Bearer {session['access_token']}"}
 
 
+async def onboard(
+    client: AsyncClient, admin_headers: dict[str, str], telegram_id: int, grants: list[dict[str, str | None]]
+) -> dict[str, str]:
+    """Yangi xodim: kiradi → admin faollashtiradi, rol beradi → qayta kiradi. Natija — Authorization sarlavhasi."""
+    await sign_in(client, telegram_id)
+    listed = await client.get("/api/v1/identity/users", params={"status": "pending"}, headers=admin_headers)
+    user_id = next(u["id"] for u in listed.json() if u["telegram_id"] == telegram_id)
+    await client.post(f"/api/v1/identity/users/{user_id}/activate", headers=admin_headers)
+    roles = await client.put(f"/api/v1/identity/users/{user_id}/roles", json={"grants": grants}, headers=admin_headers)
+    assert roles.status_code == 204, roles.text
+    session = await sign_in(client, telegram_id)
+    assert session.status_code == 200, session.text
+    return bearer(session.json())
+
+
 @pytest.fixture(scope="session")
 def settings() -> Settings:
     # _env_file=None: lokal backend/.env (haqiqiy iiko parollari) testlarga tushmasin
@@ -73,7 +88,8 @@ async def _clean_tables() -> AsyncIterator[None]:
         await conn.execute(
             text(
                 "TRUNCATE catalog.suppliers, catalog.stores, catalog.products, catalog.product_categories,"
-                " catalog.branches, platform.outbox, identity.users, iiko.links, iiko.sync_runs CASCADE"
+                " catalog.branches, platform.outbox, identity.users, iiko.links, iiko.sync_runs,"
+                " procurement.purchase_requests, procurement.purchase_orders CASCADE"
             )
         )
     await engine.dispose()

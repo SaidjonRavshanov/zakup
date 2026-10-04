@@ -12,6 +12,7 @@ from sqlalchemy.orm import aliased
 from zakup.modules.catalog.application.dto import (
     CategoryItem,
     ContactsData,
+    Labels,
     OfferItem,
     PriceHistoryItem,
     ProductDetail,
@@ -21,10 +22,12 @@ from zakup.modules.catalog.application.dto import (
     SupplierDetail,
     SupplierListItem,
 )
-from zakup.modules.catalog.domain.offer import PRICE_EXP, PriceSource
+from zakup.modules.catalog.domain.offer import PRICE_EXP, PriceSource, SupplierOffer
 from zakup.modules.catalog.domain.product import Unit
 from zakup.modules.catalog.domain.purchase_card import PurchaseMode
 from zakup.modules.catalog.domain.supplier import PaymentTerms
+from zakup.modules.catalog.infrastructure import tables as t
+from zakup.modules.catalog.infrastructure.repositories import offer_from_row
 from zakup.modules.catalog.infrastructure.tables import (
     branches,
     product_categories,
@@ -291,3 +294,35 @@ class SqlPriceHistoryReader:
             )
             for row in rows
         ]
+
+
+class SqlOffersByProduct:
+    def __init__(self, session: AsyncSession) -> None:
+        self._session = session
+
+    async def active(self, product_id: UUID) -> list[SupplierOffer]:
+        query = select(supplier_products).where(
+            supplier_products.c.product_id == product_id, supplier_products.c.archived_at.is_(None)
+        )
+        return [offer_from_row(row) for row in (await self._session.execute(query)).mappings().all()]
+
+
+class SqlLabelReader:
+    def __init__(self, session: AsyncSession) -> None:
+        self._session = session
+
+    async def labels(self, *, products: set[UUID], suppliers: set[UUID], stores: set[UUID]) -> Labels:
+        result = Labels(products={}, suppliers={}, stores={})
+        if products:
+            query = select(t.products.c.id, t.products.c.name, t.products.c.base_unit).where(
+                t.products.c.id.in_(products)
+            )
+            for row in await self._session.execute(query):
+                result.products[row.id] = (row.name, Unit(row.base_unit))
+        if suppliers:
+            query = select(t.suppliers.c.id, t.suppliers.c.name).where(t.suppliers.c.id.in_(suppliers))
+            result.suppliers.update({row.id: row.name for row in await self._session.execute(query)})
+        if stores:
+            query = select(t.stores.c.id, t.stores.c.name).where(t.stores.c.id.in_(stores))
+            result.stores.update({row.id: row.name for row in await self._session.execute(query)})
+        return result

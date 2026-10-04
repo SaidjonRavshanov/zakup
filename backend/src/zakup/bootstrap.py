@@ -24,6 +24,7 @@ from zakup.modules.catalog.application.products import (
     ReviseProduct,
 )
 from zakup.modules.catalog.application.purchase_cards import ConfigurePurchaseCard
+from zakup.modules.catalog.application.queries import CatalogQueries
 from zakup.modules.catalog.application.stores import ArchiveStore, ListStores, RegisterStore, ReviseStore
 from zakup.modules.catalog.application.use_cases import (
     ArchiveSupplier,
@@ -34,6 +35,8 @@ from zakup.modules.catalog.application.use_cases import (
 )
 from zakup.modules.catalog.infrastructure.readers import (
     SqlCategoryReader,
+    SqlLabelReader,
+    SqlOffersByProduct,
     SqlPriceHistoryReader,
     SqlProductReader,
     SqlStoreReader,
@@ -74,14 +77,60 @@ from zakup.modules.integration_iiko.application.sync import ImportPurchasePrices
 from zakup.modules.integration_iiko.infrastructure.catalog_adapter import CatalogSyncAdapter
 from zakup.modules.integration_iiko.infrastructure.client import HttpIikoGateway, PgAdvisoryLock
 from zakup.modules.integration_iiko.infrastructure.repositories import SqlLinks, SqlSyncRunReader, SqlSyncRuns
+from zakup.modules.procurement.api.router import public_router as procurement_public_router
+from zakup.modules.procurement.api.router import router as procurement_router
+from zakup.modules.procurement.application.orders import (
+    ApproveOrderChanges,
+    CancelOrder,
+    GetOrder,
+    GetPublicOrder,
+    ListOrders,
+    OrderSettings,
+    RecordOrderResponse,
+    SendOrder,
+    SupplierRespond,
+)
+from zakup.modules.procurement.application.requests import (
+    AddRequestLine,
+    ApproveRequest,
+    CancelRequest,
+    ChangeRequestLine,
+    ChooseLineOffer,
+    CreateRequest,
+    GetRequest,
+    ListRequests,
+    RejectRequest,
+    RemoveRequestLine,
+    ReturnRequest,
+    ReviseRequest,
+    SubmitRequest,
+)
+from zakup.modules.procurement.domain.approval import ApprovalPolicy
+from zakup.modules.procurement.domain.order import Tolerance
+from zakup.modules.procurement.infrastructure.catalog_adapter import CatalogAdapter
+from zakup.modules.procurement.infrastructure.readers import SqlOrderReader, SqlRequestReader
+from zakup.modules.procurement.infrastructure.repositories import (
+    SqlOrderRepository,
+    SqlRequestRepository,
+    SqlResponseTokens,
+)
 from zakup.platform.access_tokens import AccessTokenCodec, InvalidAccessTokenError
 from zakup.platform.di import Stub
 from zakup.platform.health import router as health_router
 from zakup.platform.uow import SqlAlchemyUnitOfWork
 from zakup.settings import Settings
-from zakup.shared_kernel.auth import Principal
+from zakup.shared_kernel.auth import Principal, Role
 
-ROUTERS: tuple[APIRouter, ...] = (health_router, auth_router, me_router, users_router, catalog_router, iiko_router)
+ROUTERS: tuple[APIRouter, ...] = (
+    health_router,
+    auth_router,
+    me_router,
+    users_router,
+    catalog_router,
+    iiko_router,
+    procurement_router,
+    procurement_public_router,
+)
 
 T = TypeVar("T")
 Overrides = dict[Callable[..., Any], Callable[..., Any]]
@@ -118,6 +167,7 @@ def wire(
     _wire_identity(app, overrides, per_request, settings)
     _wire_catalog(overrides, per_request)
     _wire_iiko(overrides, per_request, build_iiko_gateway(settings, engine))
+    _wire_procurement(overrides, per_request, settings)
 
 
 def _wire_identity(
@@ -267,3 +317,63 @@ def iiko_scope_factory(session_factory: async_sessionmaker[AsyncSession]) -> Cal
 def _wire_iiko(overrides: Overrides, per_request: PerRequest, gateway: HttpIikoGateway) -> None:
     overrides[Stub(RequestSync)] = per_request(lambda s: RequestSync(gateway, SqlSyncRuns(s), s.commit))
     overrides[Stub(ListSyncRuns)] = per_request(lambda s: ListSyncRuns(gateway, SqlSyncRunReader(s)))
+
+
+# ---------------------------------------------------------------- procurement
+
+
+def catalog_port(session: AsyncSession) -> CatalogAdapter:
+    """procurement → catalog public interfeysi (bitta sessiyada)."""
+    return CatalogAdapter(
+        CatalogQueries(
+            offers=SqlOfferRepository(session),
+            products=SqlProductRepository(session),
+            suppliers=SqlSupplierRepository(session),
+            stores=SqlStoreRepository(session),
+            cards=SqlPurchaseCardRepository(session),
+            offers_by_product=SqlOffersByProduct(session),
+            labels=SqlLabelReader(session),
+        )
+    )
+
+
+def _wire_procurement(overrides: Overrides, per_request: PerRequest, settings: Settings) -> None:
+    policy = ApprovalPolicy({Role(role): limit for role, limit in settings.approval_limits.items()})
+    order_settings = OrderSettings(
+        tolerance=Tolerance(price_pct=settings.price_tolerance_pct, abs_max=settings.price_tolerance_abs),
+        response_hours=settings.supplier_response_hours,
+        public_base_url=settings.public_base_url,
+        company_name=settings.company_name,
+    )
+
+    def uow(session: AsyncSession) -> SqlAlchemyUnitOfWork:
+        return SqlAlchemyUnitOfWork(session)
+
+    requests, orders = SqlRequestRepository, SqlOrderRepository
+    providers: dict[type, Callable[[AsyncSession], Any]] = {
+        CreateRequest: lambda s: CreateRequest(uow(s), requests(s), catalog_port(s)),
+        ReviseRequest: lambda s: ReviseRequest(uow(s), requests(s)),
+        AddRequestLine: lambda s: AddRequestLine(uow(s), requests(s), catalog_port(s)),
+        ChangeRequestLine: lambda s: ChangeRequestLine(uow(s), requests(s)),
+        RemoveRequestLine: lambda s: RemoveRequestLine(uow(s), requests(s)),
+        ChooseLineOffer: lambda s: ChooseLineOffer(uow(s), requests(s), catalog_port(s)),
+        SubmitRequest: lambda s: SubmitRequest(uow(s), requests(s)),
+        ApproveRequest: lambda s: ApproveRequest(uow(s), requests(s), orders(s), catalog_port(s), policy=policy),
+        ReturnRequest: lambda s: ReturnRequest(uow(s), requests(s)),
+        RejectRequest: lambda s: RejectRequest(uow(s), requests(s)),
+        CancelRequest: lambda s: CancelRequest(uow(s), requests(s)),
+        ListRequests: lambda s: ListRequests(SqlRequestReader(s), catalog_port(s)),
+        GetRequest: lambda s: GetRequest(SqlRequestReader(s), SqlOrderReader(s), catalog_port(s)),
+        ListOrders: lambda s: ListOrders(SqlOrderReader(s), catalog_port(s)),
+        GetOrder: lambda s: GetOrder(SqlOrderReader(s), catalog_port(s)),
+        SendOrder: lambda s: SendOrder(
+            uow(s), orders(s), SqlOrderReader(s), SqlResponseTokens(s), catalog_port(s), settings=order_settings
+        ),
+        RecordOrderResponse: lambda s: RecordOrderResponse(uow(s), orders(s), order_settings),
+        ApproveOrderChanges: lambda s: ApproveOrderChanges(uow(s), orders(s), policy),
+        CancelOrder: lambda s: CancelOrder(uow(s), orders(s)),
+        GetPublicOrder: lambda s: GetPublicOrder(SqlResponseTokens(s), SqlOrderReader(s), catalog_port(s)),
+        SupplierRespond: lambda s: SupplierRespond(uow(s), orders(s), SqlResponseTokens(s), order_settings),
+    }
+    for use_case, build in providers.items():
+        overrides[Stub(use_case)] = per_request(build)

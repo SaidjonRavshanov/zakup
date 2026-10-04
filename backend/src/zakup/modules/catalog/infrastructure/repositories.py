@@ -246,7 +246,7 @@ def _offer_row(offer: SupplierOffer) -> dict[str, Any]:
     }
 
 
-def _offer(row: RowMapping) -> SupplierOffer:
+def offer_from_row(row: RowMapping) -> SupplierOffer:
     return SupplierOffer(
         id=row["id"],
         supplier_id=row["supplier_id"],
@@ -265,7 +265,7 @@ class SqlOfferRepository(_TableRepository[SupplierOffer]):
     table = supplier_products
     conflict_key = "offer.modified"
     to_row = staticmethod(_offer_row)
-    to_domain = staticmethod(_offer)
+    to_domain = staticmethod(offer_from_row)
 
     async def find(self, *, supplier_id: UUID, product_id: UUID, supplier_sku: str | None) -> SupplierOffer | None:
         sku = supplier_products.c.supplier_sku
@@ -275,7 +275,7 @@ class SqlOfferRepository(_TableRepository[SupplierOffer]):
             sku.is_(None) if supplier_sku is None else sku == supplier_sku,
         )
         row = (await self._session.execute(query)).mappings().first()
-        return _offer(row) if row else None
+        return offer_from_row(row) if row else None
 
     async def exists(self, *, supplier_id: UUID, product_id: UUID, supplier_sku: str | None) -> bool:
         sku = supplier_products.c.supplier_sku

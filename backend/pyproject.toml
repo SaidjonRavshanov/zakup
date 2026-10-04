@@ -54,6 +54,8 @@ known-first-party = ["zakup", "tests"]
 "src/zakup/platform/i18n.py" = ["RUF001"]
 # iiko ma'lumotidagi kirill birlik nomlari / belgilari ataylab
 "src/zakup/modules/integration_iiko/domain/mapping.py" = ["RUF001"]
+# Yetkazuvchiga ruscha xabar shabloni
+"src/zakup/modules/procurement/application/message.py" = ["RUF001"]
 "tests/**" = ["PLR2004", "S105", "S106", "RUF001"]
 "alembic/**" = ["N999"]
 
@@ -89,7 +91,12 @@ forbidden_modules = ["fastapi", "sqlalchemy", "pydantic", "asyncpg", "zakup.plat
 [[tool.importlinter.contracts]]
 name = "Modul ichidagi qatlamlar: (api | infrastructure) -> application -> domain"
 type = "layers"
-containers = ["zakup.modules.catalog", "zakup.modules.identity", "zakup.modules.integration_iiko"]
+containers = [
+    "zakup.modules.catalog",
+    "zakup.modules.identity",
+    "zakup.modules.integration_iiko",
+    "zakup.modules.procurement",
+]
 # api va infrastructure bir-birini bilmaydi: ular bootstrap.py (composition root) da ulanadi
 layers = ["api | infrastructure", "application", "domain"]
 
@@ -102,6 +109,6 @@ forbidden_modules = ["zakup.modules.*.infrastructure", "zakup.modules.*.api", "f
 [[tool.importlinter.contracts]]
 name = "Modullar bir-birining faqat application qatlamini chaqiradi (ARCHITECTURE §3.1)"
 type = "forbidden"
-source_modules = ["zakup.modules.integration_iiko"]
+source_modules = ["zakup.modules.integration_iiko", "zakup.modules.procurement"]
 forbidden_modules = ["zakup.modules.catalog.domain", "zakup.modules.catalog.infrastructure", "zakup.modules.catalog.api"]
 allow_indirect_imports = true

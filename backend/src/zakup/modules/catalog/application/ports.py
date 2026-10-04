@@ -5,6 +5,7 @@ from uuid import UUID
 
 from zakup.modules.catalog.application.dto import (
     CategoryItem,
+    Labels,
     PriceHistoryItem,
     ProductDetail,
     ProductListItem,
@@ -89,3 +90,12 @@ class ProductReader(Protocol):
 
 class PriceHistoryReader(Protocol):
     async def history(self, offer_id: UUID, *, limit: int) -> list[PriceHistoryItem]: ...
+
+
+class OffersByProduct(Protocol):
+    async def active(self, product_id: UUID) -> list[SupplierOffer]:
+        """Arxivlanmagan takliflar (yetkazuvchi arxivligi — chaqiruvchida tekshiriladi)."""
+
+
+class LabelReader(Protocol):
+    async def labels(self, *, products: set[UUID], suppliers: set[UUID], stores: set[UUID]) -> Labels: ...

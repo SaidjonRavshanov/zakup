@@ -162,6 +162,76 @@ MESSAGES: Final[dict[str, dict[Locale, str]]] = {
         "uz": "Filial boshqa foydalanuvchi tomonidan o'zgartirilgan",
         "ru": "Филиал изменён другим пользователем",
     },
+    # --- procurement: zayavka
+    "invalid_request": {"uz": "Zayavka ma'lumotlari noto'g'ri", "ru": "Некорректные данные заявки"},
+    "request.not_found": {"uz": "Zayavka topilmadi", "ru": "Заявка не найдена"},
+    "request.modified": {
+        "uz": "Zayavka boshqa foydalanuvchi tomonidan o'zgartirilgan",
+        "ru": "Заявка изменена другим пользователем",
+    },
+    "request.invalid_status": {
+        "uz": "Zayavka holatida ({status}) bu amalni bajarib bo'lmaydi",
+        "ru": "В статусе заявки ({status}) это действие недоступно",
+    },
+    "request.auto_is_system": {
+        "uz": "Avto-zayavkani tizim yaratadi",
+        "ru": "Авто-заявку формирует система",
+    },
+    "request.duplicate_product": {
+        "uz": "Bu tovar zayavkada allaqachon bor — miqdorini o'zgartiring",
+        "ru": "Этот товар уже есть в заявке — измените количество",
+    },
+    "request.too_many_lines": {"uz": "Pozitsiyalar {max} tadan oshmasin", "ru": "Не больше {max} позиций"},
+    "request.qty_positive": {"uz": "Miqdor 0 dan katta bo'lishi kerak", "ru": "Количество должно быть больше 0"},
+    "request.needed_by_past": {
+        "uz": "\"Kerak bo'lgan sana\" o'tgan kun bo'lmasin",
+        "ru": "Дата «нужно к» не может быть в прошлом",
+    },
+    "request.empty": {"uz": "Zayavkada pozitsiya yo'q", "ru": "В заявке нет позиций"},
+    "request.line_not_found": {"uz": "Pozitsiya topilmadi", "ru": "Позиция не найдена"},
+    "request.line_without_supplier": {
+        "uz": "Barcha tasdiqlanadigan pozitsiyalarga yetkazuvchi tanlang",
+        "ru": "Выберите поставщика для всех утверждаемых позиций",
+    },
+    "request.nothing_approved": {"uz": "Tasdiqlash uchun pozitsiya tanlanmagan", "ru": "Не выбраны позиции"},
+    "request.comment_required": {"uz": "Izoh yozing", "ru": "Напишите комментарий"},
+    "request.offer_mismatch": {
+        "uz": "Bu taklif shu tovar uchun emas yoki arxivda",
+        "ru": "Предложение не для этого товара или в архиве",
+    },
+    "request.offer_unavailable": {
+        "uz": "Yetkazuvchi taklifi arxivga o'tgan — boshqa yetkazuvchini tanlang",
+        "ru": "Предложение поставщика в архиве — выберите другого поставщика",
+    },
+    "approval_limit": {"uz": "Tasdiqlash limiti yetarli emas", "ru": "Недостаточно лимита утверждения"},
+    "approval.no_role": {
+        "uz": "Bu ombor bo'yicha tasdiqlash huquqingiz yo'q",
+        "ru": "Нет права утверждать по этому складу",
+    },
+    "approval.over_limit": {
+        "uz": "Summa {amount} limitingizdan ({limit}) oshadi — yuqori tasdiqlovchi kerak",
+        "ru": "Сумма {amount} выше вашего лимита ({limit}) — нужен утверждающий выше",
+    },
+    # --- procurement: buyurtma
+    "invalid_order": {"uz": "Buyurtma ma'lumotlari noto'g'ri", "ru": "Некорректные данные заказа"},
+    "order.not_found": {"uz": "Buyurtma topilmadi", "ru": "Заказ не найден"},
+    "order.modified": {
+        "uz": "Buyurtma boshqa foydalanuvchi tomonidan o'zgartirilgan",
+        "ru": "Заказ изменён другим пользователем",
+    },
+    "order.invalid_status": {
+        "uz": "Buyurtma holatida ({status}) bu amalni bajarib bo'lmaydi",
+        "ru": "В статусе заказа ({status}) это действие недоступно",
+    },
+    "order.empty": {"uz": "Buyurtmada pozitsiya yo'q", "ru": "В заказе нет позиций"},
+    "order.line_not_found": {"uz": "Buyurtma pozitsiyasi topilmadi", "ru": "Позиция заказа не найдена"},
+    "order.qty_required": {"uz": "Yangi miqdorni kiriting", "ru": "Укажите новое количество"},
+    "order.price_required": {"uz": "Yangi narxni kiriting", "ru": "Укажите новую цену"},
+    "order.reason_required": {"uz": "Bekor qilish sababini yozing", "ru": "Укажите причину отмены"},
+    "order.link_invalid": {
+        "uz": "Havola yaroqsiz yoki muddati o'tgan",
+        "ru": "Ссылка недействительна или устарела",
+    },
     # --- iiko
     "iiko_unavailable": {"uz": "iiko serveri javob bermayapti", "ru": "Сервер iiko не отвечает"},
     "iiko.unavailable": {

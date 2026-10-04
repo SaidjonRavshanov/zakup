@@ -1,3 +1,4 @@
+from decimal import Decimal
 from functools import lru_cache
 from typing import Literal
 
@@ -49,6 +50,20 @@ class Settings(BaseSettings):
     iiko_servers: list[IikoServerSettings] = []
     iiko_timeout_s: float = 120.0
     iiko_lock_wait_s: float = 300.0
+
+    # Xarid: tasdiqlash limitlari (so'm; null — cheklanmagan) — anketa javobigacha default (WORKFLOW B5)
+    approval_limits: dict[str, Decimal | None] = {
+        "buyer": Decimal(2_000_000),
+        "approver": Decimal(10_000_000),
+        "admin": None,
+    }
+    # Yetkazuvchi javobida narx dopuski: ±% va (ixtiyoriy) pozitsiya bo'yicha so'm (WORKFLOW B7)
+    price_tolerance_pct: Decimal = Decimal(3)
+    price_tolerance_abs: Decimal | None = None
+    supplier_response_hours: int = 4
+    # Yetkazuvchi havolasi: {public_base_url}/s/{token} — Mini App domeni
+    public_base_url: str = "http://127.0.0.1:5173"
+    company_name: str = "Tarnov"
 
     cors_origins: list[str] = ["http://localhost:5173", "http://127.0.0.1:5173"]
 

@@ -195,3 +195,12 @@ class PurchaseCardItem:
     primary_supplier_name: str | None
     alternative_supplier_id: UUID | None
     alternative_supplier_name: str | None
+
+
+@dataclass(frozen=True, slots=True)
+class Labels:
+    """ID → ko'rinadigan nom (boshqa modullar ro'yxatlari uchun)."""
+
+    products: dict[UUID, tuple[str, Unit]]  # (nom, bazaviy birlik)
+    suppliers: dict[UUID, str]
+    stores: dict[UUID, str]
