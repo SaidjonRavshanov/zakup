@@ -10,7 +10,7 @@ WORKDIR /app
 
 # Avval faqat bog'liqliklar — kod o'zgarsa qatlam keshdan olinadi
 COPY pyproject.toml ./
-RUN mkdir -p src/zakup && touch src/zakup/__init__.py && pip install . && pip uninstall -y zakup
+RUN mkdir -p src/zakup && touch src/zakup/__init__.py && pip install . && pip uninstall -y zakup && rm -rf build src
 
 COPY alembic.ini ./
 COPY alembic ./alembic
