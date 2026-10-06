@@ -1,10 +1,9 @@
+/** Xarid kartasi (tovar × ombor) — prototipda tovar ekranida Seg rejim; bu yerda to'liq sozlamalar. */
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useNavigate, useParams } from '@tanstack/react-router'
-import { Save } from 'lucide-react'
 import { useEffect, useState, type FormEvent } from 'react'
 import {
   CATALOG_KEY,
-  PURCHASE_MODES,
   catalogApi,
   productQuery,
   storesQuery,
@@ -14,17 +13,20 @@ import {
 } from '@/entities/catalog'
 import { describeError } from '@/shared/api/errors'
 import { useI18n } from '@/shared/i18n'
+import { useZk } from '@/shared/i18n/use-zk'
 import { telegram } from '@/shared/lib/telegram'
-import { EmptyState, FormError, LaserButton, PageHeader, SegmentedControl, SelectField, Skeleton, TextField } from '@/shared/ui'
+import { Banner, Empty, Field, Input, PageHead, RowsSkeleton, Seg, toast, usePageActions } from '@/shared/kit'
+import { Select, SuffixInput } from './form-ui'
 
 export default function PurchaseCardPage() {
   const { productId, storeId } = useParams({ from: '/shell/catalog/products/$productId/cards/$storeId' })
+  const { z } = useZk()
   const { data: product, isPending } = useQuery(productQuery(productId))
   const { data: stores } = useQuery(storesQuery)
   const store = stores?.find((s) => s.id === storeId)
 
-  if (isPending || !stores) return <Skeleton className="mt-20 h-[300px]" />
-  if (!product || !store) return <EmptyState code="404" title="404" />
+  if (isPending || !stores) return <RowsSkeleton n={4} />
+  if (!product || !store) return <Empty title={z.not_found} hint={z.not_found_hint} />
   return <CardForm product={product} storeId={store.id} storeName={store.name} />
 }
 
@@ -32,6 +34,7 @@ const decimal = (value: string) => value.replace(',', '.').replace(/[^\d.]/g, ''
 
 function CardForm({ product, storeId, storeName }: { product: ProductDetail; storeId: string; storeName: string }) {
   const { t } = useI18n()
+  const { z, f } = useZk()
   const c = t.catalog.card
   const navigate = useNavigate()
   const queryClient = useQueryClient()
@@ -47,7 +50,7 @@ function CardForm({ product, storeId, storeName }: { product: ProductDetail; sto
     primary_supplier_id: card?.primary_supplier_id ?? null,
     alternative_supplier_id: card?.alternative_supplier_id ?? null,
   })
-  const set = <K extends keyof PurchaseCardInput>(key: K, value: PurchaseCardInput[K]) => setForm((f) => ({ ...f, [key]: value }))
+  const set = <K extends keyof PurchaseCardInput>(key: K, value: PurchaseCardInput[K]) => setForm((prev) => ({ ...prev, [key]: value }))
 
   // Tanlov — shu tovarni taklif qilgan yetkazib beruvchilar (WORKFLOW B6)
   const suppliers = [...new Map(product.offers.filter((o) => !o.archived).map((o) => [o.supplier_id, o.supplier_name])).entries()]
@@ -59,81 +62,80 @@ function CardForm({ product, storeId, storeName }: { product: ProductDetail; sto
   const save = useMutation({
     mutationFn: () => catalogApi.configureCard({ ...form, safety_stock: form.safety_stock || '0', seasonal_factor: form.seasonal_factor || '1' }),
     onSuccess: async () => {
-      telegram.haptic.notify('success')
+      toast(z.toast_saved)
       await queryClient.invalidateQueries({ queryKey: CATALOG_KEY })
       void back()
     },
   })
-  const submit = (event: FormEvent) => {
-    event.preventDefault()
-    save.mutate()
+  const submit = (event?: FormEvent) => {
+    event?.preventDefault()
+    if (!save.isPending) save.mutate()
   }
-  const unit = t.units[product.base_unit]
+
+  usePageActions({ primary: { label: z.a_save, onClick: () => submit(), loading: save.isPending } })
+
+  const unit = f.unit(product.base_unit)
+  const modes: Array<{ value: PurchaseMode; label: string }> = [
+    { value: 'auto', label: z.m_auto },
+    { value: 'manual', label: z.m_manual },
+    { value: 'disabled', label: z.m_off },
+  ]
 
   return (
-    <form onSubmit={submit} className="animate-[enter_0.5s_var(--ease-expo)_both]">
-      <PageHeader meta={`${product.name} · ${storeName}`} title={c.title} />
-      <div className="flex flex-col gap-4">
-        <SegmentedControl
-          segments={PURCHASE_MODES.map((value) => ({ value, label: t.purchaseMode[value] }))}
-          value={form.mode}
-          onChange={(mode: PurchaseMode) => set('mode', mode)}
-        />
-        {form.mode === 'auto' && !form.primary_supplier_id && <p className="px-2 text-[12px] text-warning">{c.autoHint}</p>}
+    <form onSubmit={submit} className="mx-auto w-full max-w-[720px]">
+      <PageHead size={32} kicker={`${product.name} · ${storeName}`} title={c.title} />
+      <div className="mt-4 flex flex-col gap-4">
+        <Seg options={modes} value={form.mode} onChange={(mode) => set('mode', mode)} />
+        {form.mode === 'auto' && !form.primary_supplier_id && <Banner tone="warn">{c.autoHint}</Banner>}
 
-        <SelectField
-          label={c.primary}
-          value={form.primary_supplier_id ?? ''}
-          options={supplierOptions}
-          hint={suppliers.length === 0 ? t.catalog.product.offersHint : undefined}
-          onChange={(e) => set('primary_supplier_id', e.target.value || null)}
-        />
-        <SelectField
-          label={c.alternative}
-          value={form.alternative_supplier_id ?? ''}
-          options={supplierOptions.filter((o) => !o.value || o.value !== form.primary_supplier_id)}
-          disabled={!form.primary_supplier_id}
-          onChange={(e) => set('alternative_supplier_id', e.target.value || null)}
-        />
+        <Field label={c.primary} hint={suppliers.length === 0 ? t.catalog.product.offersHint : undefined}>
+          <Select
+            value={form.primary_supplier_id ?? ''}
+            options={supplierOptions}
+            onChange={(e) => set('primary_supplier_id', e.target.value || null)}
+          />
+        </Field>
+        <Field label={c.alternative}>
+          <Select
+            value={form.alternative_supplier_id ?? ''}
+            options={supplierOptions.filter((o) => !o.value || o.value !== form.primary_supplier_id)}
+            disabled={!form.primary_supplier_id}
+            onChange={(e) => set('alternative_supplier_id', e.target.value || null)}
+          />
+        </Field>
 
         <div className="grid grid-cols-2 gap-3">
-          <TextField
-            label={c.safetyStock}
-            inputMode="decimal"
-            suffix={unit}
-            value={form.safety_stock}
-            onChange={(e) => set('safety_stock', decimal(e.target.value))}
-          />
-          <TextField
-            label={c.coverage}
-            type="number"
-            min={1}
-            max={90}
-            value={form.coverage_days}
-            onChange={(e) => set('coverage_days', Number(e.target.value))}
-          />
+          <Field label={c.safetyStock}>
+            <SuffixInput inputMode="decimal" suffix={unit} value={form.safety_stock} onChange={(e) => set('safety_stock', decimal(e.target.value))} />
+          </Field>
+          <Field label={c.coverage}>
+            <SuffixInput
+              type="number"
+              min={1}
+              max={90}
+              suffix={z.days_s}
+              value={form.coverage_days}
+              onChange={(e) => set('coverage_days', Number(e.target.value))}
+            />
+          </Field>
         </div>
         <div className="grid grid-cols-2 gap-3">
-          <TextField
-            label={c.shelfLife}
-            type="number"
-            min={1}
-            value={form.shelf_life_days ?? ''}
-            onChange={(e) => set('shelf_life_days', e.target.value ? Number(e.target.value) : null)}
-          />
-          <TextField
-            label={c.seasonal}
-            inputMode="decimal"
-            value={form.seasonal_factor}
-            onChange={(e) => set('seasonal_factor', decimal(e.target.value))}
-          />
+          <Field label={c.shelfLife}>
+            <SuffixInput
+              type="number"
+              min={1}
+              suffix={z.days_s}
+              value={form.shelf_life_days ?? ''}
+              onChange={(e) => set('shelf_life_days', e.target.value ? Number(e.target.value) : null)}
+            />
+          </Field>
+          <Field label={c.seasonal}>
+            <Input inputMode="decimal" value={form.seasonal_factor} onChange={(e) => set('seasonal_factor', decimal(e.target.value))} />
+          </Field>
         </div>
-        <p className="-mt-2 px-2 text-[12px] text-text-3">{c.shelfLifeHint}</p>
+        <div className="-mt-2 text-[13px] text-n7">{c.shelfLifeHint}</div>
 
-        <FormError>{save.error && describeError(save.error, t)}</FormError>
-        <LaserButton type="submit" size="lg" block icon={<Save size={16} />} loading={save.isPending}>
-          {t.catalog.save}
-        </LaserButton>
+        {save.error && <Banner tone="danger">{describeError(save.error, t)}</Banner>}
       </div>
     </form>
   )

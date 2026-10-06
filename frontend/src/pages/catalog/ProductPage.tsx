@@ -1,94 +1,187 @@
-import { useQuery } from '@tanstack/react-query'
+/** Tovar (prototip "product", vmProduct): sarlavha, takliflar, omborlar bo'yicha xarid kartalari (rejim — Seg). */
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useNavigate, useParams } from '@tanstack/react-router'
-import { Pencil } from 'lucide-react'
+import { ChevronRight } from 'lucide-react'
 import { useEffect } from 'react'
-import { OfferRow, productQuery, storesQuery, type PurchaseCard } from '@/entities/catalog'
+import {
+  CATALOG_KEY,
+  OfferRow,
+  catalogApi,
+  productQuery,
+  storesQuery,
+  type ProductDetail,
+  type PurchaseCard,
+  type PurchaseMode,
+  type Store,
+} from '@/entities/catalog'
 import { useHasRole } from '@/entities/user'
+import { describeError } from '@/shared/api/errors'
 import { useI18n } from '@/shared/i18n'
+import { useZk } from '@/shared/i18n/use-zk'
 import { telegram } from '@/shared/lib/telegram'
-import { Card, EmptyState, LaserButton, ListRow, MonoLabel, PageHeader, Skeleton, StatusBadge, type Tone } from '@/shared/ui'
+import { Empty, PageHead, RowsSkeleton, Section, Seg, Skeleton, Tag, toast, usePageActions } from '@/shared/kit'
 
-const MODE_TONE: Record<PurchaseCard['mode'], Tone> = { auto: 'accent', manual: 'neutral', disabled: 'warning' }
+type ModeValue = PurchaseMode | 'none'
 
 export default function ProductPage() {
   const { productId } = useParams({ from: '/shell/catalog/products/$productId' })
   const navigate = useNavigate()
-  const { t, fmt } = useI18n()
+  const { t } = useI18n()
+  const { z, f } = useZk()
   const canEdit = useHasRole('buyer', 'admin')
   const { data: product, isPending, error } = useQuery(productQuery(productId))
-  const { data: stores = [] } = useQuery(storesQuery)
+  const { data: stores = [], isPending: storesPending } = useQuery(storesQuery)
 
   useEffect(() => telegram.backButton(() => navigate({ to: '/catalog', search: { tab: 'products' } })), [navigate])
 
-  if (isPending) return <Skeleton className="mt-20 h-[200px]" />
-  if (error || !product) return <EmptyState code="404" title={t.common.notFound} />
+  usePageActions({
+    secondary:
+      canEdit && product
+        ? { label: t.catalog.edit, onClick: () => navigate({ to: '/catalog/products/$productId/edit', params: { productId } }) }
+        : null,
+  })
 
+  if (isPending)
+    return (
+      <div className="mx-auto w-full max-w-[720px] pt-2">
+        <Skeleton className="h-4 w-1/2" />
+        <Skeleton className="mt-2 h-8 w-3/4" />
+        <RowsSkeleton n={3} />
+      </div>
+    )
+  if (error || !product) return <Empty title={z.not_found} hint={z.not_found_hint} />
+
+  const meta = [
+    product.category_name ?? t.catalog.product.noCategory,
+    product.article ? `${z.sku} ${product.article}` : null,
+    f.unit(product.base_unit),
+    product.from_iiko ? 'iiko' : z.manual,
+  ]
+    .filter(Boolean)
+    .join(' · ')
   const cardByStore = new Map(product.cards.map((card) => [card.store_id, card]))
 
   return (
-    <div className="animate-[enter_0.5s_var(--ease-expo)_both]">
-      <PageHeader meta={t.catalog.meta} title={t.catalog.product.edit} />
+    <div className="mx-auto w-full max-w-[720px]">
+      <PageHead size={32} kicker={meta} title={product.name} aside={product.archived ? <Tag tone="warn">{t.catalog.archived}</Tag> : undefined} />
 
-      <Card index={`01/${product.category_name ?? t.catalog.product.noCategory}`} title={product.name}>
-        <div className="mt-3 flex flex-wrap items-center gap-2">
-          <StatusBadge>{`${t.catalog.product.baseUnit}: ${t.units[product.base_unit]}`}</StatusBadge>
-          {product.article && <StatusBadge>{product.article}</StatusBadge>}
-          {product.from_iiko && <StatusBadge tone="info">{t.catalog.fromIiko}</StatusBadge>}
-          {product.archived && <StatusBadge tone="warning">{t.catalog.archived}</StatusBadge>}
-        </div>
-        {canEdit && (
-          <LaserButton
-            variant="ghost"
-            className="mt-4 self-start"
-            icon={<Pencil size={14} />}
-            onClick={() => navigate({ to: '/catalog/products/$productId/edit', params: { productId } })}
-          >
-            {t.catalog.edit}
-          </LaserButton>
+      <Section className="mt-5">{z.offers}</Section>
+      {product.offers.length === 0 ? (
+        <div className="border-b border-line py-3 text-[14px] text-n7">{t.catalog.product.offersHint}</div>
+      ) : (
+        product.offers.map((offer) => (
+          <OfferRow
+            key={offer.id}
+            offer={offer}
+            titleBy="supplier"
+            onClick={() => navigate({ to: '/catalog/suppliers/$supplierId', params: { supplierId: offer.supplier_id } })}
+          />
+        ))
+      )}
+
+      <Section>{z.purchase_cards}</Section>
+      {storesPending ? (
+        <RowsSkeleton n={2} />
+      ) : stores.length === 0 ? (
+        <div className="border-b border-line py-3 text-[14px] text-n7">{t.catalog.emptyStores}</div>
+      ) : (
+        stores.map((store) => (
+          <CardRow key={store.id} product={product} store={store} card={cardByStore.get(store.id)} canEdit={canEdit} />
+        ))
+      )}
+    </div>
+  )
+}
+
+function CardRow({ product, store, card, canEdit }: { product: ProductDetail; store: Store; card?: PurchaseCard; canEdit: boolean }) {
+  const { t } = useI18n()
+  const { z, f } = useZk()
+  const navigate = useNavigate()
+  const queryClient = useQueryClient()
+
+  const setMode = useMutation({
+    mutationFn: (mode: PurchaseMode) => {
+      const firstSupplier = product.offers.find((o) => !o.archived)?.supplier_id ?? null
+      return catalogApi.configureCard({
+        product_id: product.id,
+        store_id: store.id,
+        mode,
+        safety_stock: card?.safety_stock ?? '0',
+        coverage_days: card?.coverage_days ?? 7,
+        shelf_life_days: card?.shelf_life_days ?? null,
+        seasonal_factor: card?.seasonal_factor ?? '1',
+        primary_supplier_id: card ? card.primary_supplier_id : firstSupplier,
+        alternative_supplier_id: card?.alternative_supplier_id ?? null,
+      })
+    },
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: CATALOG_KEY })
+      toast(z.toast_saved)
+    },
+  })
+
+  const labels: Record<PurchaseMode, string> = { auto: z.m_auto, manual: z.m_manual, disabled: z.m_off }
+  const options: Array<{ value: ModeValue; label: string }> = (['auto', 'manual', 'disabled'] as const).map((value) => ({
+    value,
+    label: labels[value],
+  }))
+  const value: ModeValue = setMode.isPending && setMode.variables ? setMode.variables : (card?.mode ?? 'none')
+
+  const info = !card
+    ? t.catalog.card.notConfigured
+    : card.mode === 'disabled'
+      ? null
+      : [
+          `${z.main_sup}: ${card.primary_supplier_name ?? t.catalog.card.none}`,
+          card.alternative_supplier_name ? `${z.alt_sup}: ${card.alternative_supplier_name}` : null,
+          `${z.safety} ${f.qty(card.safety_stock, product.base_unit)}`,
+          `${z.cover} ${card.coverage_days} ${z.days_s}`,
+        ]
+          .filter(Boolean)
+          .join(' · ')
+  const warn = card?.mode === 'auto' && !card.primary_supplier_id
+
+  const openCard = () => navigate({ to: '/catalog/products/$productId/cards/$storeId', params: { productId: product.id, storeId: store.id } })
+
+  return (
+    <div className="border-b border-line py-3">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <span className="text-[15px] font-medium">{store.name}</span>
+        {canEdit ? (
+          <Seg
+            size="sm"
+            options={options}
+            value={value}
+            onChange={(mode) => {
+              if (mode !== 'none' && mode !== card?.mode) setMode.mutate(mode)
+            }}
+          />
+        ) : (
+          card && <Tag tone={card.mode === 'auto' ? 'accent' : 'neutral'}>{labels[card.mode]}</Tag>
         )}
-      </Card>
-
-      <section className="mt-6">
-        <MonoLabel className="mb-3">{`02/${t.catalog.product.offers}`}</MonoLabel>
-        <div className="flex flex-col gap-2">
-          {product.offers.length === 0 ? (
-            <p className="px-2 text-sm text-text-3">{t.catalog.product.offersHint}</p>
-          ) : (
-            product.offers.map((offer) => (
-              <OfferRow
-                key={offer.id}
-                offer={offer}
-                titleBy="supplier"
-                onClick={() => navigate({ to: '/catalog/suppliers/$supplierId', params: { supplierId: offer.supplier_id } })}
-              />
-            ))
-          )}
-        </div>
-      </section>
-
-      <section className="mt-6">
-        <MonoLabel className="mb-3">{`03/${t.catalog.product.cards}`}</MonoLabel>
-        <div className="flex flex-col gap-2">
-          {stores.length === 0 && <p className="px-2 text-sm text-text-3">{t.catalog.emptyStores}</p>}
-          {stores.map((store) => {
-            const card = cardByStore.get(store.id)
-            return (
-              <ListRow
-                key={store.id}
-                meta={card ? `${t.catalog.card.coverage}: ${card.coverage_days} · ${t.catalog.card.safetyStock}: ${fmt.qty(Number(card.safety_stock))}` : undefined}
-                title={store.name}
-                subtitle={card ? (card.primary_supplier_name ?? t.catalog.card.none) : t.catalog.card.notConfigured}
-                badge={card ? <StatusBadge tone={MODE_TONE[card.mode]}>{t.purchaseMode[card.mode]}</StatusBadge> : undefined}
-                onClick={
-                  canEdit
-                    ? () => navigate({ to: '/catalog/products/$productId/cards/$storeId', params: { productId, storeId: store.id } })
-                    : undefined
-                }
-              />
-            )
-          })}
-        </div>
-      </section>
+      </div>
+      {(info || warn) &&
+        (canEdit ? (
+          <button
+            type="button"
+            onClick={openCard}
+            className="zk-hover mt-1.5 flex w-full items-center gap-2 text-left text-[13px] text-n7"
+          >
+            <span className="min-w-0 flex-1">
+              {info}
+              {warn && <span className="block text-warn">{t.catalog.card.autoHint}</span>}
+            </span>
+            <ChevronRight size={16} />
+          </button>
+        ) : (
+          <div className="mt-1.5 text-[13px] text-n7">{info}</div>
+        ))}
+      {canEdit && !info && !warn && (
+        <button type="button" onClick={openCard} className="mt-1.5 text-[13px] text-a7">
+          {t.catalog.card.configure}
+        </button>
+      )}
+      {setMode.error && <div className="mt-1.5 text-[13px] text-danger">{describeError(setMode.error, t)}</div>}
     </div>
   )
 }

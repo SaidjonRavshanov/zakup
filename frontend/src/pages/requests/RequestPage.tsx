@@ -1,56 +1,71 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useNavigate, useParams } from '@tanstack/react-router'
-import { Check, CornerUpLeft, Plus, Send, Trash2, X } from 'lucide-react'
-import { useDeferredValue, useEffect, useState } from 'react'
-import { productQuery, productsQuery } from '@/entities/catalog'
-import { ORDERS_KEY, PO_STATUS_TONE } from '@/entities/purchase-order'
+import { ChevronDown, ChevronUp, Plus, RefreshCw, TriangleAlert, X } from 'lucide-react'
+import { useState } from 'react'
+import { productQuery } from '@/entities/catalog'
+import { ORDERS_KEY } from '@/entities/purchase-order'
 import {
   REQUESTS_KEY,
-  REQUEST_STATUS_TONE,
   requestQuery,
   requestsApi,
   WhyQuantity,
+  type Decision,
   type RequestDetail,
   type RequestLine,
 } from '@/entities/purchase-request'
 import { meQuery, useHasRole } from '@/entities/user'
+import { ApiError } from '@/shared/api/client'
 import { describeError } from '@/shared/api/errors'
 import { useI18n } from '@/shared/i18n'
-import { cn } from '@/shared/lib/cn'
-import { telegram } from '@/shared/lib/telegram'
+import { fill, useZk, type ZkKey } from '@/shared/i18n/use-zk'
 import {
-  Card,
-  EmptyState,
-  FormError,
-  LaserButton,
-  ListRow,
-  MoneyText,
-  MonoLabel,
-  PageHeader,
-  SearchPill,
-  SelectField,
-  Skeleton,
-  StatusBadge,
-  TextField,
-} from '@/shared/ui'
-
-const decimal = (value: string) => value.replace(',', '.').replace(/[^\d.]/g, '')
+  Banner,
+  Btn,
+  Cells,
+  Check,
+  Empty,
+  LinkRow,
+  PageHead,
+  RowsSkeleton,
+  Section,
+  Sheet,
+  Stepper,
+  Tag,
+  Textarea,
+  confirmAction,
+  status,
+  toast,
+  usePageActions,
+} from '@/shared/kit'
+import { AddProductSheet, type PickedProduct } from './AddProductSheet'
+import { packInfo, parseQty, qtyBody, qtyStep, typeLabel } from './labels'
 
 export default function RequestPage() {
   const { requestId } = useParams({ from: '/shell/requests/$requestId' })
-  const navigate = useNavigate()
-  const { t } = useI18n()
+  const { z } = useZk()
   const { data: request, isPending, error } = useQuery(requestQuery(requestId))
 
-  useEffect(() => telegram.backButton(() => navigate({ to: '/requests' })), [navigate])
-
-  if (isPending) return <Skeleton className="mt-20 h-[300px]" />
-  if (error || !request) return <EmptyState code="404" title={t.common.notFound} />
+  if (isPending) return <RowsSkeleton n={5} />
+  if (error || !request) return <Empty title={z.not_found} hint={z.not_found_hint} />
   return <RequestView request={request} />
 }
 
+const LOG_KEY: Record<Decision, ZkKey> = {
+  approved: 'log_approved',
+  partial: 'log_partial',
+  returned: 'log_returned',
+  rejected: 'log_rejected',
+}
+
+interface Run {
+  fn: () => Promise<unknown>
+  msg?: (result: unknown) => string
+  after?: () => void
+}
+
 function RequestView({ request }: { request: RequestDetail }) {
-  const { t, fmt } = useI18n()
+  const { z, f } = useZk()
+  const { t } = useI18n()
   const navigate = useNavigate()
   const queryClient = useQueryClient()
   const { data: me } = useQuery(meQuery)
@@ -58,9 +73,16 @@ function RequestView({ request }: { request: RequestDetail }) {
   const isDecider = useHasRole('buyer', 'approver', 'admin')
   const canEdit = request.status === 'DRAFT' && (me?.id === request.initiator_id || isManager)
   const pending = request.status === 'PENDING_APPROVAL'
-  const [selected, setSelected] = useState<Set<string>>(new Set())
-  const [openLine, setOpenLine] = useState<string | null>(null)
-  const [comment, setComment] = useState('')
+  const canDecide = pending && isDecider
+  const canSup = canEdit || (pending && isManager)
+
+  const [deselected, setDeselected] = useState<ReadonlySet<string>>(new Set())
+  const [why, setWhy] = useState<string | null>(null)
+  const [lineId, setLineId] = useState<string | null>(null)
+  const [adding, setAdding] = useState(false)
+  const [addKey, setAddKey] = useState(0)
+  const [deciding, setDeciding] = useState(false)
+  const [reason, setReason] = useState('')
 
   const refresh = () =>
     Promise.all([
@@ -68,365 +90,435 @@ function RequestView({ request }: { request: RequestDetail }) {
       queryClient.invalidateQueries({ queryKey: ORDERS_KEY }),
     ])
   const action = useMutation({
-    mutationFn: (run: () => Promise<unknown>) => run(),
-    onSuccess: async () => {
-      telegram.haptic.notify('success')
-      setSelected(new Set())
-      setComment('')
+    mutationFn: (run: Run) => run.fn(),
+    onSuccess: async (result, run) => {
+      if (run.msg) toast(run.msg(result))
+      run.after?.()
       await refresh()
     },
   })
-  const run = (fn: () => Promise<unknown>) => action.mutate(fn)
+  const run = (r: Run) => action.mutate(r)
 
-  const partial = selected.size > 0 && selected.size < request.lines.length
+  const add = useMutation({
+    mutationFn: (p: PickedProduct) => requestsApi.addLine(request.id, { product_id: p.product.id, qty: qtyBody(p.qty), note: null }),
+    onSuccess: async () => {
+      toast(z.toast_added)
+      setAdding(false)
+      setAddKey((k) => k + 1)
+      await refresh()
+    },
+  })
+
+  const selected = request.lines.filter((l) => !deselected.has(l.id))
+  const partial = selected.length < request.lines.length
+  const selTotal = selected.reduce((a, l) => a + Number(l.amount), 0)
+  const toggle = (id: string) =>
+    setDeselected((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+
+  const cancel = async () => {
+    const ok = await confirmAction({
+      title: fill(z.cf_cancel_req, { id: request.number }),
+      body: z.cf_irrev,
+      label: z.a_cancel_req,
+      cancel: z.cancel,
+      danger: true,
+    })
+    if (ok) run({ fn: () => requestsApi.cancel(request.id), msg: () => z.toast_cancelled })
+  }
+
+  const decide = (kind: 'return' | 'reject') => {
+    const comment = reason.trim()
+    if (!comment) return
+    run({
+      fn: () => (kind === 'return' ? requestsApi.returnBack(request.id, comment) : requestsApi.reject(request.id, comment)),
+      msg: () => (kind === 'return' ? z.toast_returned : z.toast_rejected),
+      after: () => {
+        setDeciding(false)
+        setReason('')
+      },
+    })
+  }
+
+  usePageActions(
+    canEdit
+      ? {
+          primary: {
+            label: z.a_submit,
+            onClick: () => run({ fn: () => requestsApi.submit(request.id), msg: () => z.toast_submitted }),
+            disabled: request.lines.length === 0,
+            loading: action.isPending,
+          },
+          secondary: { label: z.a_cancel_req, onClick: () => void cancel(), danger: true },
+        }
+      : canDecide
+        ? {
+            primary: {
+              label: partial ? `${z.a_approve_sel} (${selected.length})` : z.a_approve,
+              onClick: () =>
+                run({
+                  fn: () => requestsApi.approve(request.id, partial ? selected.map((l) => l.id) : null),
+                  msg: (r) => `${z.toast_approved} · ${z.orders_created}: ${(r as { order_ids: string[] }).order_ids.length}`,
+                  after: () => setDeselected(new Set()),
+                }),
+              disabled: selected.length === 0,
+              loading: action.isPending,
+            },
+            secondary: { label: z.a_return_reject, onClick: () => setDeciding(true) },
+          }
+        : {},
+  )
+
+  const s = status(z, 'request', request.status)
+  const sheetLine = request.lines.find((l) => l.id === lineId) ?? null
+  const conflict = action.error instanceof ApiError && action.error.status === 409
 
   return (
-    <div className="animate-[enter_0.5s_var(--ease-expo)_both]">
-      <PageHeader
-        meta={`${request.number} · ${request.store_name ?? '—'}`}
-        title={t.requestType[request.type]}
-        action={<StatusBadge tone={REQUEST_STATUS_TONE[request.status]}>{t.requestStatus[request.status]}</StatusBadge>}
+    <div className="mx-auto max-w-[720px]">
+      <PageHead
+        kicker={`${request.store_name ?? '—'} · ${typeLabel(z, request.type)}`}
+        title={request.number}
+        aside={<Tag tone={s.tone} className="text-[13px]">{s.label}</Tag>}
       />
 
-      <Card index={`01/${t.requests.neededBy}`} title={fmt.date(request.needed_by)}>
-        {request.comment && <p className="mt-2 text-[13px] text-text-2">{request.comment}</p>}
-        <div className="mt-3 flex items-baseline justify-between">
-          <MonoLabel>{t.requests.total}</MonoLabel>
-          <MoneyText value={Number(request.total)} className="text-lg" />
-        </div>
-      </Card>
-
-      <section className="mt-6">
-        <MonoLabel className="mb-3">{`02/${t.requests.lines}`}</MonoLabel>
-        <div className="flex flex-col gap-2">
-          {request.lines.map((line) => (
-            <LineCard
-              key={line.id}
-              request={request}
-              line={line}
-              open={openLine === line.id}
-              onToggle={() => setOpenLine(openLine === line.id ? null : line.id)}
-              editable={canEdit}
-              supplierEditable={canEdit || (pending && isManager)}
-              selectable={pending && isDecider}
-              selected={selected.has(line.id)}
-              onSelect={(on) =>
-                setSelected((prev) => {
-                  const next = new Set(prev)
-                  if (on) next.add(line.id)
-                  else next.delete(line.id)
-                  return next
-                })
-              }
-              onChanged={refresh}
-            />
-          ))}
-          {canEdit && <AddProduct request={request} onAdded={refresh} />}
-        </div>
-      </section>
-
-      <FormError>{action.error && describeError(action.error, t)}</FormError>
-
-      {canEdit && (
-        <div className="mt-6 flex flex-col gap-2">
-          <LaserButton
-            size="lg"
-            block
-            icon={<Send size={16} />}
-            disabled={request.lines.length === 0}
-            loading={action.isPending}
-            onClick={() => run(() => requestsApi.submit(request.id))}
-          >
-            {t.requests.submit}
-          </LaserButton>
-          <LaserButton variant="ghost" block icon={<X size={14} />} onClick={() => run(() => requestsApi.cancel(request.id))}>
-            {t.requests.cancel}
-          </LaserButton>
-        </div>
+      {action.error && (
+        <Banner
+          tone="danger"
+          onClose={() => action.reset()}
+          action={
+            conflict && (
+              <Btn
+                size="sm"
+                icon={<RefreshCw size={18} />}
+                style={{ color: 'var(--zk-danger)', borderColor: 'var(--zk-danger)' }}
+                onClick={() => {
+                  action.reset()
+                  void refresh().then(() => toast(z.toast_refreshed))
+                }}
+              >
+                {z.a_refresh}
+              </Btn>
+            )
+          }
+        >
+          {conflict ? z.err_conflict : describeError(action.error, t)}
+        </Banner>
       )}
 
-      {pending && isDecider && (
-        <div className="mt-6 flex flex-col gap-2">
-          <LaserButton
-            size="lg"
-            block
-            icon={<Check size={16} />}
-            loading={action.isPending}
-            onClick={() => run(() => requestsApi.approve(request.id, partial ? [...selected] : null))}
-          >
-            {partial ? t.requests.approveSelected(selected.size) : t.requests.approve}
-          </LaserButton>
-          <TextField label={t.requests.comment} placeholder={t.requests.commentPlaceholder} maxLength={500} value={comment} onChange={(e) => setComment(e.target.value)} />
-          <div className="grid grid-cols-2 gap-2">
-            <LaserButton
-              variant="ghost"
-              icon={<CornerUpLeft size={14} />}
-              disabled={!comment.trim()}
-              onClick={() => run(() => requestsApi.returnBack(request.id, comment.trim()))}
-            >
-              {t.requests.returnBack}
-            </LaserButton>
-            <LaserButton
-              variant="danger"
-              icon={<X size={14} />}
-              disabled={!comment.trim()}
-              onClick={() => run(() => requestsApi.reject(request.id, comment.trim()))}
-            >
-              {t.requests.reject}
-            </LaserButton>
-          </div>
-        </div>
+      <Cells
+        className="mt-4"
+        cols={2}
+        size={22}
+        items={[
+          { label: z.need_to, value: f.dt(request.needed_by) },
+          { label: z.total, value: f.money(request.total) },
+        ]}
+      />
+      {request.type === 'auto' && <div className="mt-2.5 text-[14px] text-n7">{`${z.author}: ${z.autoreq}`}</div>}
+      {request.comment && <div className="mt-1.5 border-l-2 border-line pl-2.5 text-[15px]">{request.comment}</div>}
+
+      <Section aside={canDecide ? `${z.selected}: ${selected.length} · ${f.money(selTotal)}` : undefined}>
+        {`${z.positions} · ${request.lines.length}`}
+      </Section>
+      {request.lines.map((line) => (
+        <LineRow
+          key={line.id}
+          line={line}
+          selectable={canDecide}
+          selected={!deselected.has(line.id)}
+          onToggle={() => toggle(line.id)}
+          whyOpen={why === line.id}
+          onWhy={() => setWhy(why === line.id ? null : line.id)}
+          onTap={canSup ? () => setLineId(line.id) : undefined}
+        />
+      ))}
+      {canEdit && (
+        <Btn size="lg" block className="mt-4" icon={<Plus size={20} />} onClick={() => setAdding(true)}>
+          {z.add_item}
+        </Btn>
       )}
 
       {request.orders.length > 0 && (
-        <section className="mt-6">
-          <MonoLabel className="mb-3">{`03/${t.requests.orders}`}</MonoLabel>
-          <div className="flex flex-col gap-2">
-            {request.orders.map((order) => (
-              <ListRow
+        <>
+          <Section>{z.orders}</Section>
+          {request.orders.map((order) => {
+            const os = status(z, 'order', order.status)
+            return (
+              <LinkRow
                 key={order.id}
-                meta={order.number}
-                title={order.supplier_name ?? '—'}
-                badge={<StatusBadge tone={PO_STATUS_TONE[order.status]}>{t.poStatus[order.status]}</StatusBadge>}
-                trailing={<MoneyText value={Number(order.total)} className="text-[13px]" />}
+                aside={<Tag tone={os.tone}>{os.label}</Tag>}
                 onClick={() => navigate({ to: '/orders/$orderId', params: { orderId: order.id } })}
-              />
-            ))}
-          </div>
-        </section>
+              >
+                <span className="font-medium">{order.number}</span>
+                {` · ${order.supplier_name ?? '—'}`}
+              </LinkRow>
+            )
+          })}
+        </>
       )}
 
       {request.approvals.length > 0 && (
-        <section className="mt-6">
-          <MonoLabel className="mb-3">{`04/${t.requests.history}`}</MonoLabel>
-          <div className="rounded-card border border-border-soft bg-surface px-4">
-            {request.approvals.map((a, i) => (
-              <div key={i} className="border-b border-border-soft py-3 last:border-0">
-                <div className="flex items-center justify-between gap-3 text-[13px]">
-                  <span className="font-semibold">{t.requests.decision[a.decision]}</span>
-                  <span className="text-text-3">{`${fmt.date(a.decided_at)} ${fmt.time(a.decided_at)}`}</span>
-                </div>
-                {a.comment && <p className="mt-1 text-[13px] text-text-2">{a.comment}</p>}
-                {a.role_conflict && <StatusBadge tone="warning" className="mt-2">{t.requests.roleConflict}</StatusBadge>}
+        <>
+          <Section className="mb-1">{z.decisions}</Section>
+          {request.approvals.map((a, i) => (
+            <div key={i} className="flex flex-col gap-1 border-b border-line py-2.5">
+              <div className="flex justify-between gap-3 text-[15px]">
+                <span>
+                  <span className="font-medium">{capitalize(z[LOG_KEY[a.decision]])}</span>
+                  {` · ${f.money(a.amount)}`}
+                </span>
+                <span className="whitespace-nowrap text-[13px] text-n7">{f.dtTime(a.decided_at)}</span>
               </div>
-            ))}
-          </div>
-        </section>
+              {a.comment && <div className="text-[14px] text-n7">{`«${a.comment}»`}</div>}
+              {a.role_conflict && (
+                <Tag tone="warn" className="self-start">
+                  {z.combo}
+                </Tag>
+              )}
+            </div>
+          ))}
+        </>
       )}
+
+      <Sheet open={!!sheetLine} title={sheetLine?.product_name ?? ''} onClose={() => setLineId(null)}>
+        {sheetLine && (
+          <LineSheet
+            key={sheetLine.id}
+            request={request}
+            line={sheetLine}
+            editable={canEdit}
+            onChanged={refresh}
+            onDeleted={() => setLineId(null)}
+          />
+        )}
+      </Sheet>
+
+      {canEdit && (
+        <AddProductSheet
+          key={addKey}
+          open={adding}
+          onClose={() => {
+            setAdding(false)
+            add.reset()
+          }}
+          exclude={new Set(request.lines.map((l) => l.product_id))}
+          onAdd={(p) => add.mutate(p)}
+          busy={add.isPending}
+          error={add.error ? describeError(add.error, t) : null}
+        />
+      )}
+
+      <Sheet open={deciding} title={z.decide_title} onClose={() => setDeciding(false)}>
+        <Textarea
+          className="min-h-24"
+          value={reason}
+          maxLength={500}
+          placeholder={z.reason_ph}
+          onChange={(e) => setReason(e.target.value)}
+        />
+        <div className="mt-1.5 text-[13px] text-n7">{z.reason_req}</div>
+        {action.error && <Banner tone="danger">{describeError(action.error, t)}</Banner>}
+        <div className="mt-4 flex gap-2.5">
+          <Btn size="lg" className="flex-1" disabled={!reason.trim() || action.isPending} onClick={() => decide('return')}>
+            {z.a_return}
+          </Btn>
+          <Btn
+            size="lg"
+            danger
+            className="flex-1"
+            style={{ borderColor: 'var(--zk-danger)' }}
+            disabled={!reason.trim() || action.isPending}
+            onClick={() => decide('reject')}
+          >
+            {z.a_reject}
+          </Btn>
+        </div>
+      </Sheet>
     </div>
   )
 }
 
-interface LineCardProps {
-  request: RequestDetail
+const capitalize = (s: string) => s.charAt(0).toUpperCase() + s.slice(1)
+
+function LineRow({
+  line,
+  selectable,
+  selected,
+  onToggle,
+  whyOpen,
+  onWhy,
+  onTap,
+}: {
   line: RequestLine
-  open: boolean
-  onToggle: () => void
-  editable: boolean
-  supplierEditable: boolean
   selectable: boolean
   selected: boolean
-  onSelect: (on: boolean) => void
-  onChanged: () => Promise<unknown>
-}
-
-function LineCard({ request, line, open, onToggle, editable, supplierEditable, selectable, selected, onSelect, onChanged }: LineCardProps) {
-  const { t, fmt } = useI18n()
-  const [why, setWhy] = useState(false)
-  const unit = t.units[line.base_unit]
-  const rejected = line.decision === 'rejected'
+  onToggle: () => void
+  whyOpen: boolean
+  onWhy: () => void
+  onTap?: () => void
+}) {
+  const { z, f } = useZk()
+  const unit = line.base_unit
   const suggested = line.qty_suggested !== null ? Number(line.qty_suggested) : null
   const changed = suggested !== null && suggested !== Number(line.qty)
+  const Body = onTap ? 'button' : 'div'
   return (
-    <div className={cn('rounded-row border border-border-soft bg-surface shadow-[var(--shadow-card)]', rejected && 'opacity-50')}>
-      <div className="flex items-center gap-3 px-4 py-3">
-        {selectable && (
-          <button
-            type="button"
-            aria-pressed={selected}
-            aria-label={line.product_name}
-            onClick={() => onSelect(!selected)}
-            className={cn(
-              'grid size-6 shrink-0 place-items-center rounded-md border',
-              selected ? 'border-[var(--accent-border)] bg-accent text-accent-ink' : 'border-border',
-            )}
-          >
-            {selected && <Check size={14} />}
-          </button>
-        )}
-        <button type="button" className="min-w-0 flex-1 text-left" onClick={supplierEditable ? onToggle : undefined}>
-          <div className="truncate text-[15px] font-semibold">{line.product_name}</div>
-          <div className={cn('mt-0.5 truncate text-[12px]', line.supplier_name ? 'text-text-2' : 'text-warning')}>
-            {line.supplier_name ?? t.requests.noSupplier}
-            {rejected && ` · ${t.requests.lineRejected}`}
-          </div>
-        </button>
-        <div className="shrink-0 text-right">
-          <div className="tnum text-[14px] font-semibold">{`${fmt.qty(Number(line.qty))} ${unit}`}</div>
-          <MoneyText value={Number(line.amount)} className="text-[12px] font-normal text-text-2" />
-          {suggested !== null && (
-            <button
-              type="button"
-              className={cn('block w-full text-right text-[11px] underline decoration-dotted', changed ? 'text-warning' : 'text-text-3')}
-              onClick={() => setWhy(!why)}
-            >
-              {changed ? t.requests.why.changed(`${fmt.qty(suggested)} ${unit}`) : t.requests.why.title}
-            </button>
-          )}
-        </div>
-      </div>
-      {why && line.calc && (
-        <div className="px-4 pb-3">
-          <WhyQuantity calc={line.calc} unit={line.base_unit} qty={suggested ?? Number(line.qty)} />
+    <div className="flex items-stretch border-b border-line" style={{ opacity: line.decision === 'rejected' ? 0.45 : 1 }}>
+      {selectable && (
+        <div className="pt-3">
+          <Check on={selected} onToggle={onToggle} label={line.product_name} />
         </div>
       )}
-      {open && supplierEditable && <LineEditor request={request} line={line} editable={editable} onChanged={onChanged} />}
+      <div className="min-w-0 flex-1 py-3">
+        <Body
+          type={onTap ? 'button' : undefined}
+          onClick={onTap}
+          className="grid w-full grid-cols-[minmax(0,1fr)_auto] gap-x-3 gap-y-0.5 text-left text-ink"
+          style={{ cursor: onTap ? 'pointer' : 'default' }}
+        >
+          <div className="text-[16px] font-medium leading-tight">{line.product_name}</div>
+          <div className="whitespace-nowrap text-right text-[15px] font-medium">
+            {line.supplier_name ? f.money(line.amount) : '—'}
+          </div>
+          <div className="col-span-full text-[14px]">{f.qty(line.qty, unit)}</div>
+          {line.supplier_name ? (
+            <div className="col-span-full text-[13px] text-n7">
+              {line.price_per_base !== null
+                ? `${line.supplier_name} · ${f.money(line.price_per_base)} / ${f.unit(unit)}`
+                : line.supplier_name}
+            </div>
+          ) : (
+            <div className="col-span-full flex items-center gap-1.5 text-[14px] text-warn">
+              <TriangleAlert size={16} />
+              {z.no_sup}
+            </div>
+          )}
+        </Body>
+        {suggested !== null && line.calc && (
+          <>
+            <button
+              type="button"
+              onClick={onWhy}
+              className="mt-1 flex min-h-9 items-center gap-1 py-1.5 text-[14px]"
+              style={{ color: changed ? 'var(--zk-warn)' : 'var(--color-accent-700)' }}
+            >
+              {changed ? `${z.changed_auto}: ${f.qty(suggested, unit)}` : z.why_much}
+              {whyOpen ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+            </button>
+            {whyOpen && <WhyQuantity calc={line.calc} unit={unit} qty={suggested} />}
+          </>
+        )}
+      </div>
     </div>
   )
 }
 
-function LineEditor({
+function LineSheet({
   request,
   line,
   editable,
   onChanged,
+  onDeleted,
 }: {
   request: RequestDetail
   line: RequestLine
   editable: boolean
   onChanged: () => Promise<unknown>
+  onDeleted: () => void
 }) {
-  const { t, fmt } = useI18n()
+  const { z, f } = useZk()
+  const { t } = useI18n()
   const { data: product } = useQuery(productQuery(line.product_id))
-  const [qty, setQty] = useState(String(Number(line.qty)))
+  const [qty, setQty] = useState(f.n(Number(line.qty)).replace(/\s/g, ''))
   const offers = (product?.offers ?? []).filter((o) => !o.archived)
+  const current = offers.find((o) => o.id === line.offer_id) ?? null
   const save = useMutation({
     mutationFn: (run: () => Promise<unknown>) => run(),
     onSuccess: () => onChanged(),
   })
+  const value = parseQty(qty)
+  const packed = current && !(Number(current.pack_factor) === 1 && current.pack_unit === line.base_unit)
+  const step = packed ? Number(current.pack_factor) : qtyStep(line.base_unit)
+  const pk = current && value > 0 ? packInfo(value, current, f, line.base_unit) : null
+  const dirty = value > 0 && value !== Number(line.qty)
+
+  const packText = pk?.label ? `= ${pk.label} · ${f.money(pk.sum)}` : ''
 
   return (
-    <div className="flex flex-col gap-3 border-t border-border-soft px-4 py-3">
-      <SelectField
-        label={t.requests.supplier}
-        value={line.offer_id ?? ''}
-        hint={offers.length === 0 ? t.requests.noOffers : undefined}
-        options={[
-          { value: '', label: t.requests.noSupplier },
-          ...offers.map((o) => ({
-            value: o.id,
-            label: `${o.supplier_name} · ${fmt.money(Number(o.base_unit_price))} / ${t.units[o.base_unit]}`,
-          })),
-        ]}
-        onChange={(e) => save.mutate(() => requestsApi.chooseOffer(request.id, line.id, e.target.value || null))}
-      />
-      {editable && (
-        <div className="flex items-end gap-2">
-          <TextField
-            className="flex-1"
-            label={t.requests.qty}
-            inputMode="decimal"
-            suffix={t.units[line.base_unit]}
-            value={qty}
-            onChange={(e) => setQty(decimal(e.target.value))}
-          />
-          <LaserButton
-            type="button"
-            className="h-12"
-            icon={<Check size={14} />}
-            disabled={!(Number(qty) > 0) || Number(qty) === Number(line.qty)}
-            loading={save.isPending}
-            onClick={() => save.mutate(() => requestsApi.changeLine(request.id, line.id, { qty, note: line.note }))}
-          >
-            {t.requests.save}
-          </LaserButton>
-          <LaserButton
-            type="button"
-            variant="danger"
-            className="h-12"
-            aria-label={t.requests.remove}
-            icon={<Trash2 size={14} />}
-            onClick={() => save.mutate(() => requestsApi.removeLine(request.id, line.id))}
-          >
-            {''}
-          </LaserButton>
-        </div>
-      )}
-      <FormError>{save.error && describeError(save.error, t)}</FormError>
-    </div>
-  )
-}
-
-function AddProduct({ request, onAdded }: { request: RequestDetail; onAdded: () => Promise<unknown> }) {
-  const { t } = useI18n()
-  const [search, setSearch] = useState('')
-  const query = useDeferredValue(search.trim())
-  const [picked, setPicked] = useState<{ id: string; name: string; unit: string } | null>(null)
-  const [qty, setQty] = useState('')
-  const { data: products = [] } = useQuery({ ...productsQuery(query), enabled: query.length >= 2 })
-  const inRequest = new Set(request.lines.map((line) => line.product_id))
-
-  const add = useMutation({
-    mutationFn: () => requestsApi.addLine(request.id, { product_id: picked!.id, qty, note: null }),
-    onSuccess: async () => {
-      telegram.haptic.notify('success')
-      setPicked(null)
-      setQty('')
-      setSearch('')
-      await onAdded()
-    },
-  })
-
-  return (
-    <div className="mt-2 rounded-card border border-dashed border-border p-3">
-      <MonoLabel className="mb-2">{t.requests.addProduct}</MonoLabel>
-      {picked ? (
-        <div className="flex flex-col gap-2">
-          <div className="flex items-center justify-between gap-2 text-[15px] font-semibold">
-            {picked.name}
-            <button type="button" aria-label="x" className="text-text-3" onClick={() => setPicked(null)}>
-              <X size={16} />
+    <>
+      <div className="mb-2 mt-1 text-[13px] font-medium text-n7">{z.supplier}</div>
+      {offers.length === 0 && <div className="py-2 text-[14px] text-n7">{t.requests.noOffers}</div>}
+      <div className="flex flex-col gap-2">
+        {offers.map((o) => {
+          const on = o.id === line.offer_id
+          const packOf = !(Number(o.pack_factor) === 1 && o.pack_unit === o.base_unit)
+          return (
+            <button
+              key={o.id}
+              type="button"
+              disabled={save.isPending}
+              onClick={() => !on && save.mutate(() => requestsApi.chooseOffer(request.id, line.id, o.id))}
+              className="flex min-h-14 items-center gap-3 bg-transparent px-3 py-2 text-left text-ink"
+              style={{ border: `1px solid ${on ? 'var(--color-accent)' : 'var(--color-divider)'}` }}
+            >
+              <span
+                className="size-[18px] shrink-0 rounded-full"
+                style={{
+                  border: `1.5px solid ${on ? 'var(--color-accent)' : 'var(--color-divider)'}`,
+                  boxShadow: 'inset 0 0 0 4px var(--color-bg)',
+                  background: on ? 'var(--color-accent)' : 'transparent',
+                }}
+              />
+              <span className="min-w-0 flex-1">
+                <span className="block text-[16px] font-medium">{o.supplier_name}</span>
+                <span className="block text-[13px] text-n7">
+                  {`${f.money(o.base_unit_price)} / ${f.unit(o.base_unit)}`}
+                  {packOf && ` · 1 ${f.pack(o.pack_unit)} = ${f.qty(o.pack_factor, o.base_unit)}`}
+                </span>
+              </span>
             </button>
-          </div>
-          <div className="flex items-end gap-2">
-            <TextField
-              className="flex-1"
-              label={t.requests.qty}
-              inputMode="decimal"
-              autoFocus
-              suffix={picked.unit}
-              value={qty}
-              onChange={(e) => setQty(decimal(e.target.value))}
-            />
-            <LaserButton type="button" className="h-12" icon={<Plus size={14} />} disabled={!(Number(qty) > 0)} loading={add.isPending} onClick={() => add.mutate()}>
-              {t.requests.add}
-            </LaserButton>
-          </div>
-          <FormError>{add.error && describeError(add.error, t)}</FormError>
-        </div>
-      ) : (
+          )
+        })}
+      </div>
+      {editable && (
         <>
-          <SearchPill placeholder={t.requests.searchProduct} value={search} onChange={(e) => setSearch(e.target.value)} />
-          {query.length >= 2 && (
-            <div className="mt-2 flex flex-col">
-              {products
-                .filter((p) => !inRequest.has(p.id))
-                .slice(0, 8)
-                .map((p) => (
-                  <button
-                    key={p.id}
-                    type="button"
-                    className="flex items-center justify-between gap-3 border-b border-border-soft px-2 py-2.5 text-left text-[14px] last:border-0"
-                    onClick={() => setPicked({ id: p.id, name: p.name, unit: t.units[p.base_unit] })}
-                  >
-                    <span className="truncate">{p.name}</span>
-                    <span className="shrink-0 font-mono text-[10px] uppercase tracking-[0.2em] text-text-3">{t.units[p.base_unit]}</span>
-                  </button>
-                ))}
-            </div>
+          <div className="mb-2 mt-5 text-[13px] font-medium text-n7">{packed ? z.qty_packs : `${z.qty} · ${f.unit(line.base_unit)}`}</div>
+          <Stepper size={56} value={qty} onChange={setQty} step={step} min={step} unit={f.unit(line.base_unit)} label={z.qty} />
+          {packText && <div className="mt-2 text-[14px] text-n7">{packText}</div>}
+          {dirty && (
+            <Btn
+              variant="primary"
+              size="lg"
+              block
+              className="mt-4"
+              loading={save.isPending}
+              onClick={() => save.mutate(() => requestsApi.changeLine(request.id, line.id, { qty: qtyBody(qty), note: line.note }))}
+            >
+              {z.a_save}
+            </Btn>
           )}
+          <Btn
+            variant="ghost"
+            danger
+            className="mt-4"
+            icon={<X size={20} />}
+            disabled={save.isPending}
+            onClick={() =>
+              save.mutate(async () => {
+                await requestsApi.removeLine(request.id, line.id)
+                onDeleted()
+              })
+            }
+          >
+            {z.a_delete_line}
+          </Btn>
         </>
       )}
-    </div>
+      {save.error && <Banner tone="danger">{describeError(save.error, t)}</Banner>}
+    </>
   )
 }

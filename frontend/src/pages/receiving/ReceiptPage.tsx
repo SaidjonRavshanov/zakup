@@ -1,51 +1,62 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useNavigate, useParams } from '@tanstack/react-router'
-import { Check, ImageIcon } from 'lucide-react'
+import { ChevronRight, FileText, TriangleAlert } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { ORDERS_KEY } from '@/entities/purchase-order'
 import {
-  EXPORT_STATUS_TONE,
   RECEIPTS_KEY,
-  RECEIPT_STATUS_TONE,
   RESOLUTIONS,
   receiptQuery,
   resolveDispute,
+  type Discrepancy,
   type ReceiptDetail,
+  type ReceiptLine,
   type Resolution,
 } from '@/entities/receipt'
 import { useHasRole } from '@/entities/user'
 import { describeError } from '@/shared/api/errors'
 import { loadFile } from '@/shared/api/files'
 import { useI18n } from '@/shared/i18n'
+import { useZk, type ZkKey } from '@/shared/i18n/use-zk'
+import { Banner, Blueprint, Btn, Cells, Empty, KV, RowsSkeleton, Section, Sheet, Skeleton, Tag, Textarea, status, toast, usePageActions } from '@/shared/kit'
 import { cn } from '@/shared/lib/cn'
-import { telegram } from '@/shared/lib/telegram'
-import { Card, EmptyState, FormError, LaserButton, MoneyText, MonoLabel, PageHeader, SelectField, Skeleton, StatusBadge, TextField } from '@/shared/ui'
+
+const RESOLUTION_KEY: Record<Resolution, ZkKey> = {
+  accepted: 'res_fact',
+  return: 'res_return',
+  discount: 'res_discount',
+  replacement: 'res_replace',
+}
 
 export default function ReceiptPage() {
   const { receiptId } = useParams({ from: '/shell/receiving/receipts/$receiptId' })
-  const navigate = useNavigate()
-  const { t } = useI18n()
+  const { z } = useZk()
   const { data: receipt, isPending, error } = useQuery(receiptQuery(receiptId))
 
-  useEffect(() => telegram.backButton(() => navigate({ to: '/receiving' })), [navigate])
-
-  if (isPending) return <Skeleton className="mt-20 h-[300px]" />
-  if (error || !receipt) return <EmptyState code="404" title={t.common.notFound} />
+  if (isPending) return <RowsSkeleton n={5} />
+  if (error || !receipt) return <Empty title={z.not_found} />
   return <ReceiptView receipt={receipt} />
 }
 
 function ReceiptView({ receipt }: { receipt: ReceiptDetail }) {
-  const { t, fmt } = useI18n()
+  const { t } = useI18n()
+  const { z, f } = useZk()
+  const navigate = useNavigate()
   const queryClient = useQueryClient()
   const isDecider = useHasRole('approver', 'buyer', 'admin')
   const [resolution, setResolution] = useState<Resolution>('accepted')
   const [comment, setComment] = useState('')
+  const [photoOpen, setPhotoOpen] = useState(false)
   const [photoUrl, setPhotoUrl] = useState<string | null>(null)
+  const [photoFailed, setPhotoFailed] = useState(false)
+
+  const disputeOpen = receipt.dispute !== null && receipt.dispute.resolution === null
+  const canResolve = disputeOpen && isDecider
 
   const resolve = useMutation({
     mutationFn: () => resolveDispute(receipt.id, resolution, comment.trim()),
     onSuccess: async () => {
-      telegram.haptic.notify('success')
+      toast(z.toast_resolved)
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: RECEIPTS_KEY }),
         queryClient.invalidateQueries({ queryKey: ORDERS_KEY }),
@@ -53,117 +64,175 @@ function ReceiptView({ receipt }: { receipt: ReceiptDetail }) {
     },
   })
 
-  const showPhoto = async () => setPhotoUrl((await loadFile(`/receiving/attachments/${receipt.invoice_photo_id}`))?.url ?? null)
+  usePageActions({
+    primary: canResolve
+      ? { label: z.a_resolve, onClick: () => resolve.mutate(), disabled: !comment.trim(), loading: resolve.isPending }
+      : null,
+  })
+
+  const showPhoto = async () => {
+    setPhotoOpen(true)
+    if (photoUrl) return
+    setPhotoFailed(false)
+    const file = await loadFile(`/receiving/attachments/${receipt.invoice_photo_id}`).catch(() => null)
+    if (file) setPhotoUrl(file.url)
+    else setPhotoFailed(true)
+  }
   useEffect(() => () => {
     if (photoUrl) URL.revokeObjectURL(photoUrl)
   }, [photoUrl])
 
-  const byLine = new Map<string, typeof receipt.discrepancies>()
+  const byLine = new Map<string, Discrepancy[]>()
   for (const d of receipt.discrepancies) byLine.set(d.line_id, [...(byLine.get(d.line_id) ?? []), d])
-  const disputeOpen = receipt.dispute !== null && receipt.dispute.resolution === null
+
+  const s = status(z, 'receipt', receipt.status)
+  const ik = receipt.export_status ? status(z, 'iiko', receipt.export_status) : null
+  const invoiceTitle = receipt.supplier_invoice_no ? `${z.invoice} ${receipt.supplier_invoice_no}` : z.invoice_photo
+
+  /** Farq yorlig'i (prototip: dopusk ichida — kul rang, aks holda — ogohlantirish). */
+  const discrepancyTag = (d: Discrepancy, line: ReceiptLine) => {
+    const exp = Number(d.expected)
+    const act = Number(d.actual)
+    const pct = exp ? f.n((Math.abs(act - exp) / exp) * 100, 1) + '%' : ''
+    const label: Record<Discrepancy['kind'], string> = {
+      short: z.d_none,
+      qty_under: `${z.d_short} ${pct}`,
+      qty_over: `${z.d_over} ${pct}`,
+      price_up: `${z.d_priceup} ${pct}`,
+      price_down: `${z.d_pricedown} ${pct}`,
+      defect: `${z.d_defect} ${f.qty(line.qty_defect, line.base_unit)}`,
+    }
+    const inTol = d.kind === 'price_down' || (d.within_tolerance && d.kind !== 'defect' && d.kind !== 'short')
+    return (
+      <Tag key={d.kind} tone={inTol ? 'neutral' : 'warn'}>
+        {inTol ? `${label[d.kind]} · ${z.in_tol}` : label[d.kind]}
+      </Tag>
+    )
+  }
 
   return (
-    <div className="animate-[enter_0.5s_var(--ease-expo)_both]">
-      <PageHeader
-        meta={`${receipt.number} · ${receipt.store_name ?? '—'}`}
-        title={t.receiving.title}
-        action={<StatusBadge tone={RECEIPT_STATUS_TONE[receipt.status]}>{t.receiving.status[receipt.status]}</StatusBadge>}
+    <div>
+      <div className="flex items-start justify-between gap-3 pt-2">
+        <div className="min-w-0">
+          <div className="text-[14px] text-n7">{`${z.receipt_act} · ${f.dtTime(receipt.received_at)}`}</div>
+          <h1 className="m-0 text-[34px]">{receipt.number}</h1>
+        </div>
+        <Tag tone={s.tone} className="mt-1.5 text-[13px]">
+          {s.label}
+        </Tag>
+      </div>
+
+      <div className="mt-3">
+        <KV
+          rows={[
+            [z.supplier, receipt.supplier_name ?? '—'],
+            [z.store, receipt.store_name ?? '—'],
+            [z.inv_no, receipt.supplier_invoice_no ?? '—'],
+            [z.pay_method, receipt.payment_method ? (receipt.payment_method === 'cash' ? z.pay_cash : z.pay_bank) : '—'],
+            [
+              'iiko',
+              <span key="ik" className="inline-flex items-center gap-2">
+                {receipt.iiko_document_number && <span>{receipt.iiko_document_number}</span>}
+                {ik ? <Tag tone={ik.tone}>{ik.label}</Tag> : '—'}
+              </span>,
+            ],
+          ]}
+        />
+        {receipt.export_error && <div className="break-words py-2 text-[14px] text-danger">{receipt.export_error}</div>}
+      </div>
+
+      <Cells
+        className="mt-4"
+        cols={2}
+        size={21}
+        items={[
+          { label: z.sum_fact, value: f.money(receipt.total) },
+          { label: z.ordered, value: f.money(receipt.expected_total) },
+        ]}
       />
 
-      <Card index={`01/${fmt.date(receipt.received_at)} ${fmt.time(receipt.received_at)}`} title={receipt.supplier_name ?? '—'}>
-        <div className="mt-2 flex flex-wrap gap-2 text-[12px] text-text-2">
-          {receipt.supplier_invoice_no && <span>{`№ ${receipt.supplier_invoice_no}`}</span>}
-          {receipt.payment_method && <StatusBadge>{t.paymentMethod[receipt.payment_method]}</StatusBadge>}
-          {receipt.export_status && (
-            <StatusBadge tone={EXPORT_STATUS_TONE[receipt.export_status]}>{t.receiving.exportStatus[receipt.export_status]}</StatusBadge>
-          )}
-        </div>
-        {receipt.iiko_document_number && (
-          <p className="mt-2 text-[12px] text-text-3">{`${t.receiving.iikoDocument}: ${receipt.iiko_document_number}`}</p>
-        )}
-        {receipt.export_error && <p className="mt-2 break-words text-[12px] text-danger">{receipt.export_error}</p>}
-        <div className="mt-3 flex items-baseline justify-between">
-          <MonoLabel>{t.receiving.factTotal}</MonoLabel>
-          <MoneyText value={Number(receipt.total)} className="text-lg" />
-        </div>
-        <div className="mt-1 flex items-baseline justify-between text-text-3">
-          <MonoLabel>{t.receiving.expected}</MonoLabel>
-          <MoneyText value={Number(receipt.expected_total)} className="text-[13px] font-normal" />
-        </div>
-      </Card>
-
-      <section className="mt-6 flex flex-col gap-2">
-        <MonoLabel className="mb-1">{`02/${t.requests.lines}`}</MonoLabel>
-        {receipt.lines.map((line) => {
-          const unit = t.units[line.base_unit]
-          const found = byLine.get(line.id) ?? []
-          return (
-            <div key={line.id} className="rounded-row border border-border-soft bg-surface px-4 py-3 shadow-[var(--shadow-card)]">
-              <div className="flex items-start justify-between gap-3">
-                <div className="min-w-0 text-[15px] font-semibold">{line.product_name}</div>
-                <MoneyText value={Number(line.amount)} className="shrink-0 text-[13px]" />
-              </div>
-              <div className="tnum mt-1 text-[12px] text-text-2">
-                {`${fmt.qty(Number(line.qty_expected))} → ${fmt.qty(Number(line.qty_fact))} ${unit} · ${fmt.money(Number(line.price_fact))}`}
-                {Number(line.qty_defect) > 0 && ` · ${t.receiving.defect} ${fmt.qty(Number(line.qty_defect))} ${unit}`}
-              </div>
-              {line.defect_reason && <p className="mt-1 text-[12px] text-text-3">{line.defect_reason}</p>}
-              {found.length > 0 && (
-                <div className="mt-2 flex flex-wrap gap-1.5">
-                  {found.map((d) => (
-                    <StatusBadge key={d.kind} tone={d.kind === 'price_down' ? 'accent' : d.within_tolerance ? 'neutral' : 'warning'}>
-                      {d.within_tolerance && d.kind !== 'price_down'
-                        ? `${t.receiving.discrepancy[d.kind]} · ${t.receiving.withinTolerance}`
-                        : t.receiving.discrepancy[d.kind]}
-                    </StatusBadge>
-                  ))}
-                </div>
-              )}
+      <Section>{z.positions}</Section>
+      {receipt.lines.map((line) => {
+        const found = byLine.get(line.id) ?? []
+        return (
+          <div key={line.id} className="flex flex-col gap-1.5 border-b border-line py-3">
+            <div className="flex items-start justify-between gap-3">
+              <div className="text-[16px] font-medium">{line.product_name}</div>
+              <div className="whitespace-nowrap text-[15px]">{f.money(line.amount)}</div>
             </div>
-          )
-        })}
-      </section>
+            <div className="text-[14px] text-n7">
+              {`${f.qty(line.qty_expected, line.base_unit)} → ${f.qty(line.qty_fact, line.base_unit)} · ${f.money(line.price_fact)} / ${f.unit(line.base_unit)}`}
+            </div>
+            {line.defect_reason && <div className="text-[14px]">{`${z.defect_reason}: ${line.defect_reason}`}</div>}
+            {found.length > 0 && <div className="flex flex-wrap gap-1.5">{found.map((d) => discrepancyTag(d, line))}</div>}
+          </div>
+        )
+      })}
 
       {receipt.dispute && (
-        <section className={cn('mt-6 rounded-card border p-4', disputeOpen ? 'border-warning/40' : 'border-border-soft')}>
-          <MonoLabel className="mb-2">{t.receiving.dispute}</MonoLabel>
-          {disputeOpen ? (
+        <Blueprint className="mt-6 px-4 py-3.5">
+          <div className="flex items-center gap-2 font-head text-[20px]" style={{ fontWeight: 600 }}>
+            <TriangleAlert size={20} />
+            {z.dispute}
+          </div>
+          {disputeOpen && <div className="mt-1 text-[14px] text-warn">{z.dispute_open}</div>}
+          {canResolve && (
             <>
-              <p className="text-[13px] text-text-2">{t.receiving.disputeHint}</p>
-              {isDecider && (
-                <div className="mt-3 flex flex-col gap-3">
-                  <SelectField
-                    label={t.receiving.resolve}
-                    value={resolution}
-                    options={RESOLUTIONS.map((value) => ({ value, label: t.receiving.resolution[value] }))}
-                    onChange={(e) => setResolution(e.target.value as Resolution)}
-                  />
-                  <TextField label={t.receiving.resolveComment} maxLength={500} value={comment} onChange={(e) => setComment(e.target.value)} />
-                  <FormError>{resolve.error && describeError(resolve.error, t)}</FormError>
-                  <LaserButton block icon={<Check size={14} />} disabled={!comment.trim()} loading={resolve.isPending} onClick={() => resolve.mutate()}>
-                    {t.receiving.resolve}
-                  </LaserButton>
-                </div>
-              )}
+              <div className="mt-3 grid grid-cols-2 gap-2">
+                {RESOLUTIONS.map((value) => {
+                  const on = value === resolution
+                  return (
+                    <button
+                      key={value}
+                      type="button"
+                      aria-pressed={on}
+                      onClick={() => setResolution(value)}
+                      className={cn('min-h-11 border border-line px-2 text-[15px]', !on && 'zk-hover')}
+                      style={on ? { background: 'var(--color-accent)', color: 'var(--color-bg)' } : { color: 'var(--color-text)' }}
+                    >
+                      {z[RESOLUTION_KEY[value]]}
+                    </button>
+                  )
+                })}
+              </div>
+              <Textarea
+                className="mt-2.5"
+                maxLength={500}
+                value={comment}
+                placeholder={z.comment_req}
+                onChange={(e) => setComment(e.target.value)}
+              />
+              {resolve.error && <Banner tone="danger">{describeError(resolve.error, t)}</Banner>}
             </>
-          ) : (
-            <p className="text-[13px]">
-              <span className="font-semibold">{receipt.dispute.resolution && t.receiving.resolution[receipt.dispute.resolution]}</span>
-              {receipt.dispute.comment && ` — ${receipt.dispute.comment}`}
-            </p>
           )}
-        </section>
+          {receipt.dispute.resolution && (
+            <div className="mt-1.5 text-[15px]">
+              {`${z.decision}: ${z[RESOLUTION_KEY[receipt.dispute.resolution]]}`}
+              {receipt.dispute.comment && ` — ${receipt.dispute.comment}`}
+            </div>
+          )}
+        </Blueprint>
       )}
 
-      <section className="mt-6">
+      <div className="mt-5 flex flex-wrap gap-2">
+        <Btn icon={<FileText size={20} />} onClick={() => void showPhoto()}>
+          {z.invoice}
+        </Btn>
+        <Btn variant="ghost" onClick={() => navigate({ to: '/orders/$orderId', params: { orderId: receipt.order_id } })}>
+          {z.order}
+          <ChevronRight size={20} />
+        </Btn>
+      </div>
+
+      <Sheet open={photoOpen} title={invoiceTitle} onClose={() => setPhotoOpen(false)}>
         {photoUrl ? (
-          <img src={photoUrl} alt={t.receiving.photo} className="w-full rounded-card border border-border-soft" />
+          <img src={photoUrl} alt={z.invoice_photo} className="w-full border border-line" />
+        ) : photoFailed ? (
+          <Empty title={z.not_found} />
         ) : (
-          <LaserButton variant="ghost" block icon={<ImageIcon size={14} />} onClick={() => void showPhoto()}>
-            {t.receiving.photo}
-          </LaserButton>
+          <Skeleton className="mx-auto aspect-[3/4] max-h-[420px] w-full" />
         )}
-      </section>
+      </Sheet>
     </div>
   )
 }

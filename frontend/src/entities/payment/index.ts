@@ -1,6 +1,6 @@
 import { queryOptions } from '@tanstack/react-query'
 import { apiRequest } from '@/shared/api/client'
-import type { Tone } from '@/shared/ui'
+import type { Tone } from '@/shared/kit'
 
 export type ObligationStatus = 'OPEN' | 'PARTIALLY_PAID' | 'PAID' | 'BLOCKED'
 export type PaymentStatus = 'SUBMITTED' | 'APPROVED' | 'PAID' | 'REJECTED' | 'CANCELLED'
@@ -79,16 +79,16 @@ export interface NewPayment {
 }
 
 export const OBLIGATION_TONE: Record<ObligationStatus, Tone> = {
-  OPEN: 'info',
-  PARTIALLY_PAID: 'warning',
-  PAID: 'accent',
-  BLOCKED: 'danger',
+  OPEN: 'neutral',
+  PARTIALLY_PAID: 'accent',
+  PAID: 'ok',
+  BLOCKED: 'warn',
 }
 
 export const PAYMENT_TONE: Record<PaymentStatus, Tone> = {
-  SUBMITTED: 'warning',
-  APPROVED: 'info',
-  PAID: 'accent',
+  SUBMITTED: 'accent',
+  APPROVED: 'solid',
+  PAID: 'ok',
   REJECTED: 'danger',
   CANCELLED: 'neutral',
 }

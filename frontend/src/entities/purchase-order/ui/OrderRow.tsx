@@ -1,16 +1,18 @@
-import { useI18n } from '@/shared/i18n'
-import { ListRow, MoneyText, StatusBadge } from '@/shared/ui'
-import { PO_STATUS_TONE, type PurchaseOrder } from '../model'
+import { useZk } from '@/shared/i18n/use-zk'
+import { Row, Tag, status } from '@/shared/kit'
+import type { PurchaseOrder } from '../model'
 
+/** Buyurtma qatori (prototip poRow): PO · ombor · sana / yetkazuvchi / pozitsiyalar, summa + holat. */
 export function OrderRow({ order, onClick }: { order: PurchaseOrder; onClick?: () => void }) {
-  const { t, fmt } = useI18n()
+  const { z, f } = useZk()
+  const s = status(z, 'order', order.status)
   return (
-    <ListRow
-      meta={`${order.number} · ${order.storeName} · ${fmt.date(order.deliveryDate)}`}
+    <Row
+      meta={`${order.number} · ${order.storeName} · ${f.dt(order.deliveryDate)}`}
       title={order.supplierName}
-      subtitle={t.orders.positions(order.linesCount)}
-      badge={<StatusBadge tone={PO_STATUS_TONE[order.status]}>{t.poStatus[order.status]}</StatusBadge>}
-      trailing={<MoneyText value={order.totalAmount} className="text-[13px]" />}
+      sub={`${order.linesCount} ${z.pos_short}`}
+      amount={f.money(order.totalAmount)}
+      badge={<Tag tone={s.tone}>{s.label}</Tag>}
       onClick={onClick}
     />
   )

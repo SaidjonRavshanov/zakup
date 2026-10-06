@@ -14,6 +14,12 @@ const dashboardRoute = createRoute({
   component: lazyRouteComponent(() => import('@/pages/dashboard/DashboardPage')),
 })
 
+const todoRoute = createRoute({
+  getParentRoute: () => shellRoute,
+  path: '/todo',
+  component: lazyRouteComponent(() => import('@/pages/todo/TodoPage')),
+})
+
 const ordersRoute = createRoute({
   getParentRoute: () => shellRoute,
   path: '/orders',
@@ -171,15 +177,9 @@ const catalogRoutes = [
   }),
 ] as const
 
-// Prod build'da shart statik false bo'ladi → vitrin chunk'i bundle'ga kirmaydi
-const devUiRoute = createRoute({
-  getParentRoute: () => shellRoute,
-  path: '/dev/ui',
-  component: import.meta.env.DEV ? lazyRouteComponent(() => import('@/pages/dev-ui/DevUiPage')) : NotFound,
-})
 
 const routeTree = rootRoute.addChildren([
-  shellRoute.addChildren([dashboardRoute, ordersRoute, receivingRoute, receiveOrderRoute, profileRoute, usersRoute, userEditRoute, iikoRoute, receiptRoute, ...financeRoutes, analyticsRoute, ...requestRoutes, catalogRoute, ...catalogRoutes, devUiRoute]),
+  shellRoute.addChildren([dashboardRoute, todoRoute, ordersRoute, receivingRoute, receiveOrderRoute, profileRoute, usersRoute, userEditRoute, iikoRoute, receiptRoute, ...financeRoutes, analyticsRoute, ...requestRoutes, catalogRoute, ...catalogRoutes]),
 ])
 
 export const router = createRouter({

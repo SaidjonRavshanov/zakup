@@ -1,43 +1,44 @@
-/* Shriftlar: faqat kerakli subset va og'irliklar (DESIGN_SYSTEM.md §3).
-   Plus Jakarta Sans'da asosiy kirill yo'q → stekdagi Manrope kirill glif'larni beradi. */
-@import '@fontsource/plus-jakarta-sans/latin-800.css';
-@import '@fontsource/plus-jakarta-sans/latin-ext-800.css';
-@import '@fontsource/manrope/cyrillic-800.css';
-@import '@fontsource/inter/latin-400.css';
-@import '@fontsource/inter/cyrillic-400.css';
-@import '@fontsource/inter/latin-600.css';
-@import '@fontsource/inter/cyrillic-600.css';
-@import '@fontsource/geist-mono/latin-500.css';
-@import '@fontsource/geist-mono/cyrillic-500.css';
+/* Shriftlar — lokal (omborda internet sekin). Barlow'da kirill yo'q (Google'da ham) —
+   kirill glif'larni Roboto / Roboto Condensed beradi (stekda ikkinchi, unicode-range bo'yicha). */
+@import '@fontsource/barlow/latin-400.css';
+@import '@fontsource/barlow/latin-500.css';
+@import '@fontsource/barlow/latin-700.css';
+@import '@fontsource/barlow-condensed/latin-600.css';
+@import '@fontsource/roboto/cyrillic-400.css';
+@import '@fontsource/roboto/cyrillic-500.css';
+@import '@fontsource/roboto/cyrillic-700.css';
+@import '@fontsource/roboto-condensed/cyrillic-600.css';
 
 @import 'tailwindcss';
 @import './tokens.css';
+@import './industry.css';
 
-/* Tokenlarni Tailwind utility'lariga ulash: bg-surface, text-text-2, border-border ... */
+/* Tokenlar → Tailwind utility'lari: bg-ground, text-ink, border-line, text-n7, bg-a1, text-warn ...
+   (nomlar boshqacha: --color-bg o'ziga havola bo'lib qolmasin) */
 @theme inline {
-  --color-bg: var(--bg);
-  --color-surface: var(--surface);
-  --color-surface-2: var(--surface-2);
-  --color-text: var(--text);
-  --color-text-2: var(--text-2);
-  --color-text-3: var(--text-3);
-  --color-border: var(--border);
-  --color-border-soft: var(--border-soft);
-  --color-accent: var(--accent);
-  --color-accent-ink: var(--accent-ink);
-  --color-accent-text: var(--accent-text);
-  --color-accent-wash: var(--accent-wash);
-  --color-danger: var(--danger);
-  --color-warning: var(--warning);
-  --color-info: var(--info);
+  --color-ground: var(--color-bg);
+  --color-panel: var(--color-surface);
+  --color-ink: var(--color-text);
+  --color-acc: var(--color-accent);
+  --color-line: var(--color-divider);
+  --color-n1: var(--color-neutral-100);
+  --color-n2: var(--color-neutral-200);
+  --color-n3: var(--color-neutral-300);
+  --color-n4: var(--color-neutral-400);
+  --color-n7: var(--color-neutral-700);
+  --color-n8: var(--color-neutral-800);
+  --color-a1: var(--color-accent-100);
+  --color-a2: var(--color-accent-200);
+  --color-a6: var(--color-accent-600);
+  --color-a7: var(--color-accent-700);
+  --color-a8: var(--color-accent-800);
+  --color-warn: var(--zk-warn);
+  --color-warnbg: var(--zk-warn-bg);
+  --color-danger: var(--zk-danger);
+  --color-dangerbg: var(--zk-danger-bg);
 
-  --font-display: 'Plus Jakarta Sans', 'Manrope', system-ui, sans-serif;
-  --font-sans: 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif;
-  --font-mono: 'Geist Mono', ui-monospace, 'SFMono-Regular', monospace;
-
-  --radius-card: 2rem;
-  --radius-row: 1.25rem;
-  --ease-expo: cubic-bezier(0.16, 1, 0.3, 1);
+  --font-head: var(--font-heading);
+  --font-sans: var(--font-body);
 }
 
 @layer base {
@@ -46,46 +47,15 @@
     -webkit-text-size-adjust: 100%;
   }
   body {
-    @apply bg-bg font-sans text-text antialiased;
     min-height: 100dvh;
     overscroll-behavior-y: none;
-  }
-  /* Noise: bitta statik qatlam (SVG feTurbulence emas — arzon telefonlarda qimmat) */
-  body::before {
-    content: '';
-    position: fixed;
-    inset: 0;
-    z-index: 100;
-    pointer-events: none;
-    background: url('/noise.png') repeat;
-    opacity: var(--noise-opacity);
-  }
-  :focus-visible {
-    outline: 2px solid var(--accent-text);
-    outline-offset: 2px;
+    font-variant-numeric: tabular-nums;
   }
   button { cursor: pointer; }
-}
-
-@utility tnum {
-  font-variant-numeric: tabular-nums;
-}
-
-@utility glass {
-  background: var(--glass);
-  backdrop-filter: blur(20px);
-  -webkit-backdrop-filter: blur(20px);
-}
-
-/* Kuchsiz qurilma / kamaytirilgan harakat (DESIGN_SYSTEM.md §6) */
-:root[data-perf='lite'] .glass {
-  backdrop-filter: none;
-  -webkit-backdrop-filter: none;
-  background: var(--surface);
-}
-:root[data-perf='lite'] body::before,
-:root[data-perf='lite'] .glow {
-  display: none;
+  a { color: var(--color-accent-700); }
+  a:hover { color: var(--color-accent-800); }
+  /* Lucide — ingichka chiziq (Industry: stroke 1.5) */
+  svg.lucide { stroke-width: 1.5px; flex: none; }
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -95,11 +65,18 @@
   }
 }
 
-@keyframes enter {
-  from { opacity: 0; transform: translateY(12px); }
-  to { opacity: 1; transform: none; }
+@keyframes zkUp {
+  from { transform: translateY(24px); opacity: 0; }
+  to { transform: none; opacity: 1; }
 }
-@keyframes shimmer {
-  from { transform: translateX(-100%); }
-  to { transform: translateX(100%); }
+@keyframes zkFade {
+  from { opacity: 0; }
+  to { opacity: 1; }
 }
+@keyframes zkPulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.45; }
+}
+
+/* Bosiladigan qatorlar / kartochkalar — prototipdagi style-hover */
+.zk-hover:hover { background: color-mix(in srgb, var(--color-text) 4%, transparent); }

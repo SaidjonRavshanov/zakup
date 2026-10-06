@@ -1,5 +1,4 @@
 import type { PurchaseOrderStatusKey, UnitCode } from '@/shared/i18n/keys'
-import type { Tone } from '@/shared/ui'
 
 /** Backend status mashinasi bilan bir xil (docs/ARCHITECTURE.md §5). */
 export type PurchaseOrderStatus = PurchaseOrderStatusKey
@@ -55,25 +54,11 @@ export interface PurchaseOrderDetail extends Omit<PurchaseOrder, 'linesCount'> {
   warnings: string[]
 }
 
-/** Status rangi. Matn — lug'atda: `t.poStatus[status]`. */
-export const PO_STATUS_TONE: Record<PurchaseOrderStatus, Tone> = {
-  CREATED: 'neutral',
-  SENT: 'info',
-  CONFIRMED: 'accent',
-  PARTIALLY_CONFIRMED: 'warning',
-  REAPPROVAL: 'warning',
-  RECEIVING: 'info',
-  RECEIVED: 'accent',
-  PARTIALLY_RECEIVED: 'warning',
-  CLOSED: 'neutral',
-  CANCELLED: 'danger',
-}
-
 export type OrderFilter = 'all' | 'awaiting' | 'in_transit' | 'done'
 
 export const ORDER_FILTERS: Record<OrderFilter, ReadonlyArray<PurchaseOrderStatus> | null> = {
   all: null,
-  awaiting: ['CREATED', 'SENT', 'REAPPROVAL'],
-  in_transit: ['CONFIRMED', 'PARTIALLY_CONFIRMED', 'RECEIVING'],
+  awaiting: ['CREATED', 'SENT'],
+  in_transit: ['CONFIRMED', 'PARTIALLY_CONFIRMED', 'REAPPROVAL', 'RECEIVING'],
   done: ['RECEIVED', 'PARTIALLY_RECEIVED', 'CLOSED', 'CANCELLED'],
 }

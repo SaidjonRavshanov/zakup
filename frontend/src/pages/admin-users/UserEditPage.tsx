@@ -1,7 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { useNavigate, useParams } from '@tanstack/react-router'
-import { Check, Power, Save } from 'lucide-react'
-import { useEffect, useState } from 'react'
+import { useParams } from '@tanstack/react-router'
+import { useState } from 'react'
 import {
   ROLES,
   activateUser,
@@ -14,15 +13,15 @@ import {
 } from '@/entities/user'
 import { describeError } from '@/shared/api/errors'
 import { useI18n } from '@/shared/i18n'
-import { cn } from '@/shared/lib/cn'
+import { useZk } from '@/shared/i18n/use-zk'
+import { Banner, Btn, Empty, RowsSkeleton, Section, Switch, Tag, toast, usePageActions } from '@/shared/kit'
 import { telegram } from '@/shared/lib/telegram'
-import { Card, EmptyState, LaserButton, MonoLabel, PageHeader, Skeleton, StatusBadge } from '@/shared/ui'
 
 export default function UserEditPage() {
   const { userId } = useParams({ from: '/shell/admin/users/$userId' })
-  const navigate = useNavigate()
   const queryClient = useQueryClient()
   const { t } = useI18n()
+  const { z } = useZk()
   const { data: me } = useQuery(meQuery)
   const { data: users, isPending } = useQuery(usersQuery)
   const user = users?.find((u) => u.id === userId)
@@ -32,12 +31,13 @@ export default function UserEditPage() {
   const [draft, setDraft] = useState<Set<Role> | null>(null)
   const selected = draft ?? new Set(user ? userRoles(user) : [])
 
-  useEffect(() => telegram.backButton(() => navigate({ to: '/admin/users' })), [navigate])
-
   const refresh = () => queryClient.invalidateQueries({ queryKey: usersQuery.queryKey })
   const toggleActive = useMutation({
     mutationFn: () => (user!.is_active ? deactivateUser(user!.id) : activateUser(user!.id)),
-    onSuccess: refresh,
+    onSuccess: async () => {
+      toast(user!.is_active ? z.toast_deact : z.toast_act)
+      await refresh()
+    },
   })
   const saveRoles = useMutation({
     // Hozircha rollar barcha omborlarga; ombor bo'yicha cheklangan mavjud rollar saqlanib qoladi
@@ -47,89 +47,83 @@ export default function UserEditPage() {
         ...user!.grants.filter((grant) => grant.store_id !== null),
       ]),
     onSuccess: async () => {
-      telegram.haptic.notify('success')
+      toast(z.toast_saved)
       await refresh()
       setDraft(null)
     },
   })
 
-  if (isPending) return <Skeleton className="mt-20 h-[200px]" />
-  if (!user) return <EmptyState code="404" title={t.common.notFound} />
+  const dirty = !!user && userRoles(user).join() !== ROLES.filter((r) => selected.has(r)).join()
+  usePageActions({
+    primary: user ? { label: z.a_save, onClick: () => saveRoles.mutate(), disabled: !dirty, loading: saveRoles.isPending } : null,
+  })
 
-  const dirty = userRoles(user).join() !== ROLES.filter((r) => selected.has(r)).join()
+  if (isPending) return <RowsSkeleton n={5} />
+  if (!user) return <Empty title={z.not_found} hint={z.not_found_hint} />
+
   const failure = toggleActive.error ?? saveRoles.error
 
   return (
-    <div className="animate-[enter_0.5s_var(--ease-expo)_both]">
-      <PageHeader meta={t.users.meta} title={t.users.title} />
-
-      <Card index={`01/${t.profile.user}`} title={user.full_name}>
-        <div className="mt-1 font-mono text-[11px] tracking-[0.08em] text-text-3">
-          {user.username ? `@${user.username} · ` : ''}ID {user.telegram_id}
+    <div>
+      <div className="flex items-start justify-between gap-3 pt-2">
+        <div className="min-w-0">
+          <div className="text-[14px] text-n7">
+            ID {user.telegram_id}
+            {user.username ? ` · @${user.username}` : ''}
+          </div>
+          <h1 className="m-0 text-[32px]">{user.full_name}</h1>
         </div>
-        <div className="mt-4 flex items-center justify-between gap-3">
-          <StatusBadge tone={user.is_active ? 'accent' : 'warning'}>
-            {user.is_active ? t.users.active : t.users.pending}
-          </StatusBadge>
-          {!isSelf && (
-            <LaserButton
-              variant={user.is_active ? 'danger' : 'primary'}
-              icon={<Power size={14} />}
-              loading={toggleActive.isPending}
-              onClick={() => toggleActive.mutate()}
-            >
-              {user.is_active ? t.users.deactivate : t.users.activate}
-            </LaserButton>
-          )}
-        </div>
-      </Card>
+        <Tag tone={user.is_active ? 'ok' : 'warn'} className="mt-1.5 text-[13px]">
+          {user.is_active ? z.usr_active : z.usr_pending}
+        </Tag>
+      </div>
 
-      <section className="mt-6">
-        <MonoLabel className="mb-3">{`02/${t.users.roles}`}</MonoLabel>
-        <div className="grid grid-cols-2 gap-2">
-          {ROLES.map((role) => {
-            const on = selected.has(role)
-            const locked = isSelf && role === 'admin' // o'zidan admin'ni olib bo'lmaydi (backend ham tekshiradi)
-            return (
-              <button
-                key={role}
-                aria-pressed={on}
-                disabled={locked}
-                onClick={() => {
-                  telegram.haptic.select()
-                  const next = new Set(selected)
-                  if (on) next.delete(role)
-                  else next.add(role)
-                  setDraft(next)
-                }}
-                className={cn(
-                  'flex h-12 items-center justify-between rounded-full border px-4 text-left text-[13px] font-semibold transition-colors duration-200',
-                  on ? 'border-[var(--accent-border)] bg-accent-wash text-accent-text' : 'border-border text-text-2',
-                  locked && 'opacity-60',
-                )}
-              >
-                {t.roles[role]}
-                {on && <Check size={16} />}
-              </button>
-            )
-          })}
-        </div>
-        <p className="mt-3 text-[12px] text-text-3">{t.users.rolesHint}</p>
-      </section>
+      {!isSelf && (
+        <Btn
+          size="lg"
+          block
+          className="mt-4"
+          loading={toggleActive.isPending}
+          style={{ color: user.is_active ? 'var(--zk-danger)' : 'var(--color-accent-700)' }}
+          onClick={() => toggleActive.mutate()}
+        >
+          {user.is_active ? z.a_deactivate : z.a_activate}
+        </Btn>
+      )}
 
-      {failure && <p className="mt-4 text-sm text-danger">{describeError(failure, t)}</p>}
+      {failure && <Banner tone="danger">{describeError(failure, t)}</Banner>}
 
-      <LaserButton
-        size="lg"
-        block
-        className="mt-6"
-        icon={saveRoles.isSuccess && !dirty ? <Check size={16} /> : <Save size={16} />}
-        disabled={!dirty}
-        loading={saveRoles.isPending}
-        onClick={() => saveRoles.mutate()}
-      >
-        {saveRoles.isSuccess && !dirty ? t.users.saved : t.users.save}
-      </LaserButton>
+      <Section>
+        {z.roles} · {z.all_stores}
+      </Section>
+      {ROLES.map((role) => {
+        const on = selected.has(role)
+        const locked = isSelf && role === 'admin' // o'zidan admin'ni olib bo'lmaydi (backend ham tekshiradi)
+        return (
+          <button
+            key={role}
+            type="button"
+            aria-pressed={on}
+            disabled={locked}
+            onClick={() => {
+              telegram.haptic.select()
+              const next = new Set(selected)
+              if (on) next.delete(role)
+              else next.add(role)
+              setDraft(next)
+            }}
+            className="flex min-h-[60px] w-full items-center gap-3 border-b border-line py-2 text-left text-ink"
+            style={{ opacity: locked ? 0.5 : 1 }}
+          >
+            <div className="min-w-0 flex-1">
+              <div className="text-[16px] font-medium">{z[`r_${role}`]}</div>
+              <div className="text-[13px] text-n7">{z[`rd_${role}`]}</div>
+            </div>
+            <Switch on={on} />
+          </button>
+        )
+      })}
+      <div className="mt-2.5 text-[13px] text-n7">{z.scope_note}</div>
     </div>
   )
 }

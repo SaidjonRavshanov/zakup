@@ -1,6 +1,6 @@
+/** /catalog/suppliers/new va /catalog/suppliers/$supplierId/edit — prototipda ekran yo'q, kit Field/Input/Seg/Chips bilan. */
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useNavigate, useParams } from '@tanstack/react-router'
-import { Archive, Save } from 'lucide-react'
 import { useEffect, useState, type FormEvent } from 'react'
 import {
   CATALOG_KEY,
@@ -14,16 +14,19 @@ import {
 } from '@/entities/catalog'
 import { describeError } from '@/shared/api/errors'
 import { useI18n } from '@/shared/i18n'
+import { useZk } from '@/shared/i18n/use-zk'
 import { telegram } from '@/shared/lib/telegram'
-import { ChipsField, EmptyState, FormError, LaserButton, MonoLabel, PageHeader, SelectField, Skeleton, TextField } from '@/shared/ui'
+import { Banner, Chips, Empty, Field, Input, PageHead, RowsSkeleton, Seg, confirmAction, toast, usePageActions } from '@/shared/kit'
+import { FormSection, SuffixInput } from './form-ui'
+import { weekdayNames } from './format'
 
-/** /catalog/suppliers/new va /catalog/suppliers/$supplierId/edit */
 export default function SupplierFormPage() {
   const { supplierId } = useParams({ strict: false })
+  const { z } = useZk()
   const { data: supplier, isPending } = useQuery({ ...supplierQuery(supplierId ?? ''), enabled: Boolean(supplierId) })
 
-  if (supplierId && isPending) return <Skeleton className="mt-20 h-[300px]" />
-  if (supplierId && !supplier) return <EmptyState code="404" title="404" />
+  if (supplierId && isPending) return <RowsSkeleton n={4} />
+  if (supplierId && !supplier) return <Empty title={z.not_found} hint={z.not_found_hint} />
   return <SupplierForm supplier={supplier} />
 }
 
@@ -42,16 +45,18 @@ const toInput = (s?: SupplierDetail): SupplierInput => ({
 })
 
 const blankToNull = (value: string | null | undefined) => value?.trim() || null
+const toggleDay = (list: number[], day: number) => (list.includes(day) ? list.filter((d) => d !== day) : [...list, day]).sort((a, b) => a - b)
 
 function SupplierForm({ supplier }: { supplier?: SupplierDetail }) {
   const { t } = useI18n()
+  const { z } = useZk()
   const s = t.catalog.supplier
   const navigate = useNavigate()
   const queryClient = useQueryClient()
   const [form, setForm] = useState<SupplierInput>(() => toInput(supplier))
-  const set = <K extends keyof SupplierInput>(key: K, value: SupplierInput[K]) => setForm((f) => ({ ...f, [key]: value }))
+  const set = <K extends keyof SupplierInput>(key: K, value: SupplierInput[K]) => setForm((prev) => ({ ...prev, [key]: value }))
   const setContact = (key: keyof SupplierInput['contacts'], value: string) =>
-    setForm((f) => ({ ...f, contacts: { ...f.contacts, [key]: value } }))
+    setForm((prev) => ({ ...prev, contacts: { ...prev.contacts, [key]: value } }))
 
   const back = () =>
     supplier
@@ -60,7 +65,7 @@ function SupplierForm({ supplier }: { supplier?: SupplierDetail }) {
   useEffect(() => telegram.backButton(back))
 
   const done = async (id: string) => {
-    telegram.haptic.notify('success')
+    toast(z.toast_saved)
     await queryClient.invalidateQueries({ queryKey: CATALOG_KEY })
     void navigate({ to: '/catalog/suppliers/$supplierId', params: { supplierId: id }, replace: true })
   }
@@ -84,111 +89,132 @@ function SupplierForm({ supplier }: { supplier?: SupplierDetail }) {
   })
   const archive = useMutation({ mutationFn: () => catalogApi.archiveSupplier(supplier!.id), onSuccess: () => done(supplier!.id) })
 
-  const submit = (event: FormEvent) => {
-    event.preventDefault()
-    save.mutate()
+  const deferralInvalid = form.payment_terms === 'deferred' && !(form.deferral_days >= 1 && form.deferral_days <= 120)
+  const valid = Boolean(form.name.trim()) && !deferralInvalid
+  const submit = (event?: FormEvent) => {
+    event?.preventDefault()
+    if (valid && !save.isPending) save.mutate()
   }
-  const weekdayOptions = WEEKDAYS.map((d) => ({ value: d, label: t.weekdays[d - 1] ?? String(d) }))
+  const askArchive = async () => {
+    if (await confirmAction({ title: `${t.catalog.archive}?`, body: supplier?.name, label: t.catalog.archive, cancel: z.cancel, danger: true }))
+      archive.mutate()
+  }
+  const names = weekdayNames(z)
+  const weekdayOptions = WEEKDAYS.map((d) => ({ value: String(d), label: names[d - 1] ?? String(d) }))
   const failure = save.error ?? archive.error
 
+  usePageActions({
+    primary: { label: z.a_save, onClick: () => submit(), disabled: !valid, loading: save.isPending },
+    secondary:
+      supplier && !supplier.archived ? { label: t.catalog.archive, danger: true, onClick: () => void askArchive() } : null,
+  })
+
   return (
-    <form onSubmit={submit} className="animate-[enter_0.5s_var(--ease-expo)_both]">
-      <PageHeader meta={t.catalog.meta} title={supplier ? s.edit : s.new} />
-      <div className="flex flex-col gap-4">
-        <TextField label={s.name} required maxLength={200} value={form.name} onChange={(e) => set('name', e.target.value)} />
-        <TextField
-          label={s.inn}
-          inputMode="numeric"
-          maxLength={14}
-          value={form.inn ?? ''}
-          onChange={(e) => set('inn', e.target.value.replace(/\D/g, ''))}
-        />
+    <form onSubmit={submit} className="mx-auto w-full max-w-[720px]">
+      <PageHead kicker={z.catalog} title={supplier ? s.edit : s.new} />
+      <div className="mt-4 flex flex-col gap-4">
+        <Field label={s.name}>
+          <Input required maxLength={200} value={form.name} onChange={(e) => set('name', e.target.value)} />
+        </Field>
+        <Field label={s.inn}>
+          <Input inputMode="numeric" maxLength={14} value={form.inn ?? ''} onChange={(e) => set('inn', e.target.value.replace(/\D/g, ''))} />
+        </Field>
 
-        <MonoLabel className="mt-2">{s.terms}</MonoLabel>
-        <SelectField
-          label={s.paymentTerms}
-          value={form.payment_terms}
-          options={PAYMENT_TERMS.map((value) => ({ value, label: t.paymentTerms[value] }))}
-          onChange={(e) => set('payment_terms', e.target.value as PaymentTerms)}
-        />
+        <FormSection>{s.terms}</FormSection>
+        <Field label={s.paymentTerms}>
+          <Seg
+            options={PAYMENT_TERMS.map((value) => ({ value, label: t.paymentTerms[value] }))}
+            value={form.payment_terms}
+            onChange={(value: PaymentTerms) => set('payment_terms', value)}
+          />
+        </Field>
         {form.payment_terms === 'deferred' && (
-          <TextField
-            label={s.deferralDays}
-            type="number"
-            min={1}
-            max={120}
-            required
-            value={form.deferral_days || ''}
-            onChange={(e) => set('deferral_days', Number(e.target.value))}
-          />
+          <Field label={s.deferralDays}>
+            <SuffixInput
+              type="number"
+              min={1}
+              max={120}
+              required
+              invalid={deferralInvalid}
+              suffix={z.days_s}
+              value={form.deferral_days || ''}
+              onChange={(e) => set('deferral_days', Number(e.target.value))}
+            />
+          </Field>
         )}
         <div className="grid grid-cols-2 gap-3">
-          <TextField
-            label={s.minOrder}
-            inputMode="decimal"
-            suffix={t.common.currency}
-            value={form.min_order_amount}
-            onChange={(e) => set('min_order_amount', e.target.value.replace(',', '.'))}
-          />
-          <TextField
-            label={s.creditLimit}
-            inputMode="decimal"
-            suffix={t.common.currency}
-            value={form.credit_limit}
-            onChange={(e) => set('credit_limit', e.target.value.replace(',', '.'))}
-          />
+          <Field label={s.minOrder}>
+            <SuffixInput
+              inputMode="decimal"
+              suffix={z.sum}
+              value={form.min_order_amount}
+              onChange={(e) => set('min_order_amount', e.target.value.replace(',', '.'))}
+            />
+          </Field>
+          <Field label={s.creditLimit}>
+            <SuffixInput
+              inputMode="decimal"
+              suffix={z.sum}
+              value={form.credit_limit}
+              onChange={(e) => set('credit_limit', e.target.value.replace(',', '.'))}
+            />
+          </Field>
         </div>
 
-        <MonoLabel className="mt-2">{s.schedule}</MonoLabel>
+        <FormSection>{s.schedule}</FormSection>
         <div className="grid grid-cols-2 gap-3">
-          <TextField
-            label={s.leadTime}
-            type="number"
-            min={0}
-            max={60}
-            value={form.lead_time_days}
-            onChange={(e) => set('lead_time_days', Number(e.target.value))}
-          />
-          <TextField label={s.cutoff} type="time" value={form.order_cutoff ?? ''} onChange={(e) => set('order_cutoff', e.target.value)} />
+          <Field label={s.leadTime}>
+            <SuffixInput
+              type="number"
+              min={0}
+              max={60}
+              suffix={z.days_s}
+              value={form.lead_time_days}
+              onChange={(e) => set('lead_time_days', Number(e.target.value))}
+            />
+          </Field>
+          <Field label={s.cutoff}>
+            <Input type="time" value={form.order_cutoff ?? ''} onChange={(e) => set('order_cutoff', e.target.value)} />
+          </Field>
         </div>
-        <ChipsField label={s.orderDays} options={weekdayOptions} value={form.order_weekdays} onChange={(v) => set('order_weekdays', v.sort())} />
-        <ChipsField
-          label={s.deliveryDays}
-          options={weekdayOptions}
-          value={form.delivery_weekdays}
-          onChange={(v) => set('delivery_weekdays', v.sort())}
-        />
+        <Field label={s.orderDays}>
+          <Chips
+            options={weekdayOptions}
+            value={form.order_weekdays.map(String)}
+            onChange={(d) => set('order_weekdays', toggleDay(form.order_weekdays, Number(d)))}
+          />
+        </Field>
+        <Field label={s.deliveryDays}>
+          <Chips
+            options={weekdayOptions}
+            value={form.delivery_weekdays.map(String)}
+            onChange={(d) => set('delivery_weekdays', toggleDay(form.delivery_weekdays, Number(d)))}
+          />
+        </Field>
 
-        <MonoLabel className="mt-2">{s.contacts}</MonoLabel>
-        <TextField label={s.person} maxLength={200} value={form.contacts.person ?? ''} onChange={(e) => setContact('person', e.target.value)} />
+        <FormSection>{s.contacts}</FormSection>
+        <Field label={s.person}>
+          <Input maxLength={200} value={form.contacts.person ?? ''} onChange={(e) => setContact('person', e.target.value)} />
+        </Field>
         <div className="grid grid-cols-2 gap-3">
-          <TextField
-            label={s.phone}
-            type="tel"
-            placeholder="+998"
-            maxLength={20}
-            value={form.contacts.phone ?? ''}
-            onChange={(e) => setContact('phone', e.target.value.replace(/[^\d+]/g, ''))}
-          />
-          <TextField
-            label={s.telegram}
-            placeholder="@"
-            maxLength={64}
-            value={form.contacts.telegram ?? ''}
-            onChange={(e) => setContact('telegram', e.target.value)}
-          />
+          <Field label={s.phone}>
+            <Input
+              type="tel"
+              placeholder="+998"
+              maxLength={20}
+              value={form.contacts.phone ?? ''}
+              onChange={(e) => setContact('phone', e.target.value.replace(/[^\d+]/g, ''))}
+            />
+          </Field>
+          <Field label={s.telegram}>
+            <Input placeholder="@" maxLength={64} value={form.contacts.telegram ?? ''} onChange={(e) => setContact('telegram', e.target.value)} />
+          </Field>
         </div>
-        <TextField label={s.email} type="email" maxLength={254} value={form.contacts.email ?? ''} onChange={(e) => setContact('email', e.target.value)} />
+        <Field label={s.email}>
+          <Input type="email" maxLength={254} value={form.contacts.email ?? ''} onChange={(e) => setContact('email', e.target.value)} />
+        </Field>
 
-        <FormError>{failure && describeError(failure, t)}</FormError>
-        <LaserButton type="submit" size="lg" block icon={<Save size={16} />} loading={save.isPending} disabled={!form.name.trim()}>
-          {t.catalog.save}
-        </LaserButton>
-        {supplier && !supplier.archived && (
-          <LaserButton type="button" variant="danger" block icon={<Archive size={14} />} loading={archive.isPending} onClick={() => archive.mutate()}>
-            {t.catalog.archive}
-          </LaserButton>
-        )}
+        {failure && <Banner tone="danger">{describeError(failure, t)}</Banner>}
       </div>
     </form>
   )

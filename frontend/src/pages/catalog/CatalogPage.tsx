@@ -1,141 +1,127 @@
+/** Katalog (prototip "catalog", vmCatalog): bo'limlar (tovarlar / yetkazib beruvchilar / omborlar), qidiruv, qatorlar. */
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useNavigate, useSearch } from '@tanstack/react-router'
 import { Plus } from 'lucide-react'
 import { useDeferredValue, useState, type FormEvent } from 'react'
-import { CATALOG_KEY, CATALOG_TABS, catalogApi, productsQuery, storesQuery, suppliersQuery, type Store } from '@/entities/catalog'
+import {
+  CATALOG_KEY,
+  CATALOG_TABS,
+  catalogApi,
+  productsQuery,
+  storesQuery,
+  suppliersQuery,
+  type CatalogTab,
+  type Store,
+} from '@/entities/catalog'
 import { useHasRole } from '@/entities/user'
 import { describeError } from '@/shared/api/errors'
 import { useI18n } from '@/shared/i18n'
-import {
-  EmptyState,
-  FormError,
-  LaserButton,
-  ListRow,
-  MonoLabel,
-  PageHeader,
-  SearchPill,
-  SegmentedControl,
-  Skeleton,
-  StatusBadge,
-  TextField,
-} from '@/shared/ui'
+import { useZk } from '@/shared/i18n/use-zk'
+import { Btn, Empty, Field, Input, PageHead, Row, RowsSkeleton, SearchInput, Section, Seg, Tag } from '@/shared/kit'
+import { methodsLabel, termsLabel } from './format'
 
 export default function CatalogPage() {
-  const { t } = useI18n()
+  const { z } = useZk()
   const navigate = useNavigate()
   const tab = useSearch({ from: '/shell/catalog' }).tab ?? 'products'
   const canEdit = useHasRole('buyer', 'admin')
+  const [search, setSearch] = useState('')
+  const query = useDeferredValue(search.trim())
+
+  // Bo'lim sonlari — filtrsiz ro'yxatlardan (kesh bilan)
+  const { data: allProducts } = useQuery(productsQuery())
+  const { data: allSuppliers } = useQuery(suppliersQuery())
+  const { data: stores } = useQuery(storesQuery)
+  const counts: Record<CatalogTab, number | undefined> = {
+    products: allProducts?.length,
+    suppliers: allSuppliers?.length,
+    stores: stores?.length,
+  }
+  const labels: Record<CatalogTab, string> = { products: z.c_products, suppliers: z.c_suppliers, stores: z.c_stores }
 
   const addTarget = tab === 'products' ? '/catalog/products/new' : tab === 'suppliers' ? '/catalog/suppliers/new' : null
 
   return (
-    <div className="animate-[enter_0.5s_var(--ease-expo)_both]">
-      <PageHeader
-        meta={t.catalog.meta}
-        title={t.catalog.title}
-        action={
+    <div className="mx-auto w-full max-w-[1040px]">
+      <PageHead
+        title={z.catalog}
+        aside={
           canEdit && addTarget ? (
-            <LaserButton aria-label={t.catalog.add} icon={<Plus size={16} />} onClick={() => navigate({ to: addTarget })}>
-              {t.catalog.add}
-            </LaserButton>
+            <Btn icon={<Plus size={20} />} onClick={() => navigate({ to: addTarget })}>
+              {z.a_add}
+            </Btn>
           ) : undefined
         }
       />
-      <SegmentedControl
-        className="-mx-4 px-4"
-        segments={CATALOG_TABS.map((value) => ({ value, label: t.catalog.tabs[value] }))}
+      <Seg
+        className="mt-3"
+        options={CATALOG_TABS.map((value) => ({ value, label: labels[value], count: counts[value] }))}
         value={tab}
-        onChange={(next) => navigate({ to: '/catalog', search: { tab: next }, replace: true })}
+        onChange={(next) => {
+          setSearch('')
+          void navigate({ to: '/catalog', search: { tab: next }, replace: true })
+        }}
       />
-      <div className="mt-4">
-        {tab === 'products' && <ProductsTab />}
-        {tab === 'suppliers' && <SuppliersTab />}
-        {tab === 'stores' && <StoresTab />}
-      </div>
+      {tab !== 'stores' && (
+        <SearchInput
+          className="mt-3"
+          value={search}
+          onChange={setSearch}
+          placeholder={tab === 'suppliers' ? z.search_sup : z.search_prod}
+        />
+      )}
+      {tab === 'products' && <ProductsTab query={query} />}
+      {tab === 'suppliers' && <SuppliersTab query={query} />}
+      {tab === 'stores' && <StoresTab />}
     </div>
   )
 }
 
-function ListSkeleton() {
+function ProductsTab({ query }: { query: string }) {
+  const { t } = useI18n()
+  const { z, f } = useZk()
+  const navigate = useNavigate()
+  const { data: products, isPending } = useQuery(productsQuery(query))
+
+  if (isPending) return <RowsSkeleton n={5} />
+  if (!products?.length) return <Empty title={z.nothing_found} hint={t.catalog.emptyProducts} />
   return (
-    <div className="flex flex-col gap-2">
-      {Array.from({ length: 4 }, (_, i) => (
-        <Skeleton key={i} className="h-[76px]" />
+    <div>
+      {products.map((product) => (
+        <Row
+          key={product.id}
+          meta={[product.category_name ?? t.catalog.product.noCategory, product.article].filter(Boolean).join(' · ')}
+          title={product.name}
+          sub={`${z.suppliers_n}: ${product.offers_count} · ${f.unit(product.base_unit)}`}
+          badge={product.from_iiko ? <Tag tone="ok">iiko</Tag> : <Tag>{z.manual}</Tag>}
+          onClick={() => navigate({ to: '/catalog/products/$productId', params: { productId: product.id } })}
+        />
       ))}
     </div>
   )
 }
 
-function ProductsTab() {
+function SuppliersTab({ query }: { query: string }) {
   const { t } = useI18n()
+  const { z } = useZk()
   const navigate = useNavigate()
-  const [search, setSearch] = useState('')
-  const query = useDeferredValue(search.trim())
-  const { data: products, isPending } = useQuery(productsQuery(query))
-
-  return (
-    <>
-      <SearchPill placeholder={t.catalog.searchProducts} value={search} onChange={(e) => setSearch(e.target.value)} />
-      <div className="mt-3 flex flex-col gap-2">
-        {isPending ? (
-          <ListSkeleton />
-        ) : !products?.length ? (
-          <EmptyState code="0" title={t.common.notFound} description={t.catalog.emptyProducts} />
-        ) : (
-          products.map((product) => (
-            <ListRow
-              key={product.id}
-              meta={[product.category_name ?? t.catalog.product.noCategory, product.article].filter(Boolean).join(' · ')}
-              title={product.name}
-              subtitle={t.catalog.offersCount(product.offers_count)}
-              trailing={<span className="font-mono text-[10px] uppercase tracking-[0.2em] text-text-3">{t.units[product.base_unit]}</span>}
-              badge={product.from_iiko ? <StatusBadge tone="info">{t.catalog.fromIiko}</StatusBadge> : undefined}
-              onClick={() => navigate({ to: '/catalog/products/$productId', params: { productId: product.id } })}
-            />
-          ))
-        )}
-      </div>
-    </>
-  )
-}
-
-function SuppliersTab() {
-  const { t } = useI18n()
-  const navigate = useNavigate()
-  const [search, setSearch] = useState('')
-  const query = useDeferredValue(search.trim())
   const { data: suppliers, isPending } = useQuery(suppliersQuery(query))
 
+  if (isPending) return <RowsSkeleton n={5} />
+  if (!suppliers?.length) return <Empty title={z.nothing_found} hint={t.catalog.emptySuppliers} />
   return (
-    <>
-      <SearchPill placeholder={t.catalog.searchSuppliers} value={search} onChange={(e) => setSearch(e.target.value)} />
-      <div className="mt-3 flex flex-col gap-2">
-        {isPending ? (
-          <ListSkeleton />
-        ) : !suppliers?.length ? (
-          <EmptyState code="0" title={t.common.notFound} description={t.catalog.emptySuppliers} />
-        ) : (
-          suppliers.map((supplier) => (
-            <ListRow
-              key={supplier.id}
-              meta={supplier.inn ? `${t.catalog.supplier.inn} ${supplier.inn}` : undefined}
-              title={supplier.name}
-              subtitle={
-                supplier.payment_terms === 'deferred'
-                  ? `${t.paymentTerms.deferred} · ${t.catalog.supplier.leadDays(supplier.deferral_days)}`
-                  : t.paymentTerms[supplier.payment_terms]
-              }
-              badge={
-                supplier.payment_methods.length ? (
-                  <StatusBadge tone="info">{supplier.payment_methods.map((m) => t.paymentMethod[m]).join(' · ')}</StatusBadge>
-                ) : undefined
-              }
-              onClick={() => navigate({ to: '/catalog/suppliers/$supplierId', params: { supplierId: supplier.id } })}
-            />
-          ))
-        )}
-      </div>
-    </>
+    <div>
+      {suppliers.map((supplier) => (
+        <Row
+          key={supplier.id}
+          meta={supplier.inn ? `${z.inn} ${supplier.inn}` : undefined}
+          title={supplier.name}
+          sub={termsLabel(z, supplier.payment_terms, supplier.deferral_days)}
+          badge={supplier.payment_methods.length ? <Tag>{methodsLabel(z, supplier.payment_methods, ' / ')}</Tag> : undefined}
+          onClick={() => navigate({ to: '/catalog/suppliers/$supplierId', params: { supplierId: supplier.id } })}
+        />
+      ))}
+    </div>
   )
 }
 
@@ -151,6 +137,7 @@ function groupByBranch(stores: Store[]): Array<[string, Store[]]> {
 
 function StoresTab() {
   const { t } = useI18n()
+  const { z } = useZk()
   const queryClient = useQueryClient()
   const isAdmin = useHasRole('admin')
   const { data: stores, isPending } = useQuery(storesQuery)
@@ -171,39 +158,43 @@ function StoresTab() {
   }
 
   return (
-    <div className="flex flex-col gap-2">
+    <>
       {isPending ? (
-        <ListSkeleton />
+        <div className="mt-3">
+          <RowsSkeleton n={4} />
+        </div>
       ) : !stores?.length ? (
-        <EmptyState code="0" title={t.common.notFound} description={t.catalog.emptyStores} />
+        <Empty title={z.nothing_found} hint={t.catalog.emptyStores} />
       ) : (
         groupByBranch(stores).map(([branch, items]) => (
-          <section key={branch} className="mb-2">
-            <MonoLabel className="mb-2 mt-2">{`${branch} · ${items.length}`}</MonoLabel>
-            <div className="flex flex-col gap-2">
-              {items.map((store) => (
-                <ListRow
-                  key={store.id}
-                  title={store.name}
-                  subtitle={store.address ?? undefined}
-                  badge={store.from_iiko ? <StatusBadge tone="info">{t.catalog.fromIiko}</StatusBadge> : undefined}
-                />
-              ))}
-            </div>
+          <section key={branch}>
+            <Section className="mt-5">{branch}</Section>
+            {items.map((store) => (
+              <div key={store.id} className="flex min-h-[52px] items-center justify-between gap-3 border-b border-line py-2">
+                <div className="min-w-0">
+                  <div className="text-[16px]">{store.name}</div>
+                  {store.address && <div className="text-[13px] text-n7">{store.address}</div>}
+                </div>
+                <span className="shrink-0 text-[13px] text-n7">{store.from_iiko ? `iiko · ${branch}` : z.manual}</span>
+              </div>
+            ))}
           </section>
         ))
       )}
 
       {isAdmin && (
-        <form onSubmit={submit} className="mt-4 flex flex-col gap-3 rounded-card border border-border-soft p-4">
-          <TextField label={t.catalog.store.new} required maxLength={200} value={name} onChange={(e) => setName(e.target.value)} />
-          <TextField label={t.catalog.store.address} maxLength={500} value={address} onChange={(e) => setAddress(e.target.value)} />
-          <FormError>{create.error && describeError(create.error, t)}</FormError>
-          <LaserButton type="submit" block icon={<Plus size={16} />} loading={create.isPending} disabled={!name.trim()}>
-            {t.catalog.add}
-          </LaserButton>
+        <form onSubmit={submit} className="mt-6 flex flex-col gap-3 border border-line p-3">
+          <Field label={t.catalog.store.new}>
+            <Input required maxLength={200} value={name} onChange={(e) => setName(e.target.value)} />
+          </Field>
+          <Field label={t.catalog.store.address} error={create.error ? describeError(create.error, t) : undefined}>
+            <Input maxLength={500} value={address} onChange={(e) => setAddress(e.target.value)} />
+          </Field>
+          <Btn type="submit" block icon={<Plus size={20} />} loading={create.isPending} disabled={!name.trim()}>
+            {z.a_add}
+          </Btn>
         </form>
       )}
-    </div>
+    </>
   )
 }

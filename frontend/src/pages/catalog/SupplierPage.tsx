@@ -1,18 +1,31 @@
+/** Yetkazib beruvchi (prototip "supplier", vmSupplier): rekvizitlar, buyurtma kunlari (7 katak), tovarlar va narxlar, hisob. */
 import { useQuery } from '@tanstack/react-query'
 import { useNavigate, useParams } from '@tanstack/react-router'
-import { Pencil, Plus } from 'lucide-react'
+import { FileText, Plus } from 'lucide-react'
 import { useEffect } from 'react'
-import { OfferRow, supplierQuery } from '@/entities/catalog'
-import { useHasRole } from '@/entities/user'
+import { OfferRow, WEEKDAYS, supplierQuery } from '@/entities/catalog'
+import { meQuery, useActiveRole, useHasRole } from '@/entities/user'
 import { useI18n } from '@/shared/i18n'
+import { useZk } from '@/shared/i18n/use-zk'
 import { telegram } from '@/shared/lib/telegram'
-import { Card, EmptyState, LaserButton, MoneyText, MonoLabel, PageHeader, Skeleton, StatusBadge } from '@/shared/ui'
+import { Btn, Empty, KV, PageHead, RowsSkeleton, Section, Skeleton, Tag, usePageActions } from '@/shared/kit'
+import { methodsLabel, termsLabel, weekdayNames } from './format'
 
-function Line({ label, children }: { label: string; children: React.ReactNode }) {
+function DaysGrid({ days, names }: { days: number[]; names: string[] }) {
   return (
-    <div className="flex items-baseline justify-between gap-4 border-b border-border-soft py-2.5 last:border-0">
-      <span className="text-[13px] text-text-2">{label}</span>
-      <span className="text-right text-[14px] font-medium">{children}</span>
+    <div className="grid grid-cols-7 gap-1.5">
+      {WEEKDAYS.map((d) => {
+        const on = days.includes(d)
+        return (
+          <span
+            key={d}
+            className="grid min-h-10 place-items-center border border-line text-[14px]"
+            style={on ? { background: 'var(--color-accent)', color: 'var(--color-bg)' } : { color: 'var(--color-neutral-700)' }}
+          >
+            {names[d - 1] ?? d}
+          </span>
+        )
+      })}
     </div>
   )
 }
@@ -21,98 +34,111 @@ export default function SupplierPage() {
   const { supplierId } = useParams({ from: '/shell/catalog/suppliers/$supplierId' })
   const navigate = useNavigate()
   const { t } = useI18n()
+  const { z, f } = useZk()
   const canEdit = useHasRole('buyer', 'admin')
+  const { data: me } = useQuery(meQuery)
+  const role = useActiveRole(me)
   const { data: supplier, isPending, error } = useQuery(supplierQuery(supplierId))
 
   useEffect(() => telegram.backButton(() => navigate({ to: '/catalog', search: { tab: 'suppliers' } })), [navigate])
 
-  if (isPending) return <Skeleton className="mt-20 h-[200px]" />
-  if (error || !supplier) return <EmptyState code="404" title={t.common.notFound} />
+  usePageActions({
+    secondary:
+      canEdit && supplier
+        ? { label: t.catalog.edit, onClick: () => navigate({ to: '/catalog/suppliers/$supplierId/edit', params: { supplierId } }) }
+        : null,
+  })
 
-  const days = (list: number[]) => (list.length === 7 ? t.catalog.everyDay : list.map((d) => t.weekdays[d - 1]).join(' '))
+  if (isPending)
+    return (
+      <div className="mx-auto w-full max-w-[720px] pt-2">
+        <Skeleton className="h-4 w-1/3" />
+        <Skeleton className="mt-2 h-8 w-2/3" />
+        <RowsSkeleton n={4} />
+      </div>
+    )
+  if (error || !supplier) return <Empty title={z.not_found} hint={z.not_found_hint} />
+
   const s = t.catalog.supplier
-  const contacts = [supplier.contacts.person, supplier.contacts.phone, supplier.contacts.telegram, supplier.contacts.email].filter(Boolean)
+  const names = weekdayNames(z)
+  const c = supplier.contacts
+  const credit = Number(supplier.credit_limit)
 
   return (
-    <div className="animate-[enter_0.5s_var(--ease-expo)_both]">
-      <PageHeader meta={t.catalog.meta} title={s.edit} />
+    <div className="mx-auto w-full max-w-[720px]">
+      <PageHead
+        size={32}
+        kicker={supplier.inn ? `${z.inn} ${supplier.inn}` : undefined}
+        title={supplier.name}
+        aside={supplier.archived ? <Tag tone="warn">{t.catalog.archived}</Tag> : undefined}
+      />
 
-      <Card index={supplier.inn ? `01/${s.inn} ${supplier.inn}` : '01'} title={supplier.name}>
-        <div className="mt-3 flex flex-wrap gap-2">
-          <StatusBadge tone={supplier.payment_terms === 'deferred' ? 'info' : 'neutral'}>
-            {supplier.payment_terms === 'deferred'
-              ? `${t.paymentTerms.deferred} · ${s.leadDays(supplier.deferral_days)}`
-              : t.paymentTerms[supplier.payment_terms]}
-          </StatusBadge>
-          {supplier.payment_methods.map((m) => (
-            <StatusBadge key={m} tone="info">
-              {t.paymentMethod[m]}
-            </StatusBadge>
-          ))}
-          {supplier.archived && <StatusBadge tone="warning">{t.catalog.archived}</StatusBadge>}
-        </div>
-        {contacts.length > 0 && <p className="mt-3 text-[13px] text-text-2">{contacts.join(' · ')}</p>}
-        {canEdit && (
-          <LaserButton
-            variant="ghost"
-            className="mt-4 self-start"
-            icon={<Pencil size={14} />}
-            onClick={() => navigate({ to: '/catalog/suppliers/$supplierId/edit', params: { supplierId } })}
-          >
-            {t.catalog.edit}
-          </LaserButton>
-        )}
-      </Card>
+      <KV
+        className="mt-3"
+        rows={[
+          [z.terms, termsLabel(z, supplier.payment_terms, supplier.deferral_days)],
+          [z.pay_methods, supplier.payment_methods.length ? methodsLabel(z, supplier.payment_methods) : '—'],
+          !!c.person && [s.person, c.person],
+          [z.phone, c.phone || '—'],
+          ['Telegram', c.telegram || '—'],
+          !!c.email && [s.email, c.email],
+          [z.lead, `${supplier.lead_time_days} ${z.days_s}`],
+          !!supplier.order_cutoff && [z.cutoff, supplier.order_cutoff.slice(0, 5)],
+          [z.min_order, f.money(supplier.min_order_amount)],
+          [z.credit, credit > 0 ? f.money(credit) : z.no_limit],
+        ]}
+      />
 
-      <section className="mt-6">
-        <MonoLabel className="mb-2">{`02/${s.terms}`}</MonoLabel>
-        <div className="rounded-card border border-border-soft bg-surface px-4">
-          <Line label={s.leadTime}>{s.leadDays(supplier.lead_time_days)}</Line>
-          <Line label={s.orderDays}>{days(supplier.order_weekdays)}</Line>
-          <Line label={s.deliveryDays}>{days(supplier.delivery_weekdays)}</Line>
-          {supplier.order_cutoff && <Line label={s.cutoff}>{supplier.order_cutoff.slice(0, 5)}</Line>}
-          <Line label={s.minOrder}>
-            <MoneyText value={Number(supplier.min_order_amount)} />
-          </Line>
-          <Line label={s.creditLimit}>
-            <MoneyText value={Number(supplier.credit_limit)} />
-          </Line>
-        </div>
-      </section>
+      <Section className="mb-2 mt-5">{z.order_days}</Section>
+      <DaysGrid days={supplier.order_weekdays} names={names} />
+      <Section className="mb-2 mt-4">{s.deliveryDays}</Section>
+      <DaysGrid days={supplier.delivery_weekdays} names={names} />
 
-      <section className="mt-6">
-        <div className="mb-3 flex items-center justify-between">
-          <MonoLabel>{`03/${s.offers}`}</MonoLabel>
-          {canEdit && !supplier.archived && (
-            <LaserButton
+      <Section
+        aside={
+          canEdit && !supplier.archived ? (
+            <Btn
               variant="ghost"
-              icon={<Plus size={14} />}
+              size="sm"
+              icon={<Plus size={18} />}
               onClick={() => navigate({ to: '/catalog/suppliers/$supplierId/offers/new', params: { supplierId } })}
             >
               {s.addOffer}
-            </LaserButton>
-          )}
-        </div>
-        <div className="flex flex-col gap-2">
-          {supplier.offers.length === 0 ? (
-            <EmptyState code="0" title={t.common.notFound} />
-          ) : (
-            supplier.offers.map((offer) => (
-              <OfferRow
-                key={offer.id}
-                offer={offer}
-                titleBy="product"
-                onClick={() =>
-                  navigate({
-                    to: canEdit ? '/catalog/suppliers/$supplierId/offers/$offerId' : '/catalog/products/$productId',
-                    params: { supplierId, offerId: offer.id, productId: offer.product_id },
-                  })
-                }
-              />
-            ))
-          )}
-        </div>
-      </section>
+            </Btn>
+          ) : undefined
+        }
+      >
+        {z.goods_prices}
+      </Section>
+      {supplier.offers.length === 0 ? (
+        <div className="border-b border-line py-3 text-[14px] text-n7">{z.nothing_found}</div>
+      ) : (
+        supplier.offers.map((offer) => (
+          <OfferRow
+            key={offer.id}
+            offer={offer}
+            titleBy="product"
+            onClick={() =>
+              navigate({
+                to: canEdit ? '/catalog/suppliers/$supplierId/offers/$offerId' : '/catalog/products/$productId',
+                params: { supplierId, offerId: offer.id, productId: offer.product_id },
+              })
+            }
+          />
+        ))
+      )}
+
+      {role !== null && role !== 'initiator' && (
+        <Btn
+          block
+          size="lg"
+          className="mt-4"
+          icon={<FileText size={20} />}
+          onClick={() => navigate({ to: '/finance/suppliers/$supplierId', params: { supplierId } })}
+        >
+          {z.sup_account}
+        </Btn>
+      )}
     </div>
   )
 }

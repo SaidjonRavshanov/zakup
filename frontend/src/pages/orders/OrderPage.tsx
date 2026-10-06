@@ -1,74 +1,90 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useNavigate, useParams } from '@tanstack/react-router'
-import { Check, Copy, Send, X } from 'lucide-react'
-import { useEffect, useState } from 'react'
+import { ArrowLeft, ChevronRight, Clock, Copy, Send, X } from 'lucide-react'
+import { useState } from 'react'
 import {
   CHANNELS,
   ORDERS_KEY,
-  PO_STATUS_TONE,
   ordersApi,
   purchaseOrderQuery,
   type Channel,
   type PurchaseOrderDetail,
+  type PurchaseOrderLine,
 } from '@/entities/purchase-order'
 import { REQUESTS_KEY } from '@/entities/purchase-request'
-import { ResponseForm } from '@/features/order-response'
 import { useHasRole } from '@/entities/user'
+import { ResponseForm } from '@/features/order-response'
 import { describeError } from '@/shared/api/errors'
 import { useI18n } from '@/shared/i18n'
-import { telegram } from '@/shared/lib/telegram'
+import { fill, useZk, type ZkFormat, type Zk } from '@/shared/i18n/use-zk'
 import {
-  Card,
-  EmptyState,
-  FormError,
-  LaserButton,
-  MoneyText,
-  MonoLabel,
-  PageHeader,
-  SegmentedControl,
-  Skeleton,
-  StatusBadge,
-  TextField,
-} from '@/shared/ui'
+  Banner,
+  Blueprint,
+  Btn,
+  Chips,
+  Empty,
+  PageHead,
+  RowsSkeleton,
+  Section,
+  Sheet,
+  Tag,
+  Textarea,
+  confirmAction,
+  status,
+  toast,
+  usePageActions,
+  type PageAction,
+} from '@/shared/kit'
 
 export default function OrderPage() {
   const { orderId } = useParams({ from: '/shell/orders/$orderId' })
-  const navigate = useNavigate()
-  const { t } = useI18n()
+  const { z } = useZk()
   const { data: order, isPending, error } = useQuery(purchaseOrderQuery(orderId))
 
-  useEffect(() => telegram.backButton(() => navigate({ to: '/orders' })), [navigate])
-
-  if (isPending) return <Skeleton className="mt-20 h-[300px]" />
-  if (error || !order) return <EmptyState code="404" title={t.common.notFound} />
+  if (isPending) return <RowsSkeleton n={5} />
+  if (error || !order) return <Empty title={z.not_found} hint={z.not_found_hint} />
   return <OrderView order={order} />
 }
 
+const CANCELLABLE = ['CREATED', 'SENT', 'REAPPROVAL']
+const RECEIVABLE = ['SENT', 'CONFIRMED', 'PARTIALLY_CONFIRMED', 'RECEIVING']
+
+function channelLabel(z: Zk, c: Channel): string {
+  return { telegram: 'Telegram', whatsapp: 'WhatsApp', phone: z.ch_phone, email: 'E-mail', other: z.ch_other }[c]
+}
+
 function OrderView({ order }: { order: PurchaseOrderDetail }) {
-  const { t, fmt } = useI18n()
+  const { z, f } = useZk()
+  const { t } = useI18n()
   const navigate = useNavigate()
   const queryClient = useQueryClient()
   const isManager = useHasRole('buyer', 'admin')
   const isDecider = useHasRole('buyer', 'approver', 'admin')
-  const [channel, setChannel] = useState<Channel>('telegram')
+  const canReceive = useHasRole('storekeeper', 'buyer', 'admin')
+  const [channel, setChannel] = useState<Channel>(order.sentChannel ?? 'telegram')
   const [sent, setSent] = useState<{ message: string; response_url: string } | null>(null)
-  const [copied, setCopied] = useState(false)
+  const [responding, setResponding] = useState(false)
+  const [cancelling, setCancelling] = useState(false)
   const [reason, setReason] = useState('')
 
+  const refresh = () =>
+    Promise.all([
+      queryClient.invalidateQueries({ queryKey: ORDERS_KEY }),
+      queryClient.invalidateQueries({ queryKey: REQUESTS_KEY }),
+    ])
   const action = useMutation({
-    mutationFn: (run: () => Promise<unknown>) => run(),
-    onSuccess: async () => {
-      telegram.haptic.notify('success')
-      await Promise.all([
-        queryClient.invalidateQueries({ queryKey: ORDERS_KEY }),
-        queryClient.invalidateQueries({ queryKey: REQUESTS_KEY }),
-      ])
+    mutationFn: (run: { fn: () => Promise<unknown>; msg: string; after?: () => void }) => run.fn(),
+    onSuccess: async (_, run) => {
+      toast(run.msg)
+      run.after?.()
+      await refresh()
     },
   })
   const send = useMutation({
     mutationFn: () => ordersApi.send(order.id, channel),
     onSuccess: async (result) => {
       setSent(result)
+      toast(z.toast_sent)
       await queryClient.invalidateQueries({ queryKey: ORDERS_KEY })
     },
   })
@@ -77,7 +93,7 @@ function OrderView({ order }: { order: PurchaseOrderDetail }) {
     if (!sent) return
     try {
       await navigator.clipboard.writeText(sent.message)
-      setCopied(true)
+      toast(z.toast_copied)
     } catch {
       /* clipboard ruxsati yo'q — foydalanuvchi matnni qo'lda belgilaydi */
     }
@@ -89,130 +105,222 @@ function OrderView({ order }: { order: PurchaseOrderDetail }) {
 
   const canSend = isManager && (order.status === 'CREATED' || order.status === 'SENT')
   const canRespond = isManager && order.status === 'SENT'
-  const canCancel = isDecider && ['CREATED', 'SENT', 'REAPPROVAL'].includes(order.status)
+  const canCancel = isDecider && CANCELLABLE.includes(order.status)
+
+  const approvePrice = async () => {
+    const ok = await confirmAction({
+      title: `${z.a_approve_price}?`,
+      body: fill(z.cf_price, { s: f.money(order.confirmedTotal) }),
+      label: z.a_approve,
+      cancel: z.cancel,
+    })
+    if (ok) action.mutate({ fn: () => ordersApi.approveChanges(order.id), msg: z.toast_price_ok })
+  }
+
+  let primary: PageAction | null = null
+  if (order.status === 'CREATED' && canSend)
+    primary = { label: z.a_send, onClick: () => send.mutate(), loading: send.isPending }
+  else if (canRespond) primary = { label: z.a_enter_resp, onClick: () => setResponding(true) }
+  else if (order.status === 'REAPPROVAL' && isDecider)
+    primary = { label: z.a_approve_price, onClick: () => void approvePrice(), loading: action.isPending }
+  if (!primary && RECEIVABLE.includes(order.status) && canReceive)
+    primary = { label: z.a_receive, onClick: () => navigate({ to: '/receiving/$orderId', params: { orderId: order.id } }) }
+  usePageActions({
+    primary,
+    secondary: canCancel ? { label: z.a_cancel_po, onClick: () => setCancelling(true), danger: true } : null,
+  })
+
+  const s = status(z, 'order', order.status)
+  const hasConf = order.lines.some((l) => l.response !== null)
+  const error = action.error ?? send.error
 
   return (
-    <div className="animate-[enter_0.5s_var(--ease-expo)_both]">
-      <PageHeader
-        meta={`${order.number} · ${order.storeName}`}
-        title={t.orderPage.title}
-        action={<StatusBadge tone={PO_STATUS_TONE[order.status]}>{t.poStatus[order.status]}</StatusBadge>}
-      />
+    <div className="mx-auto max-w-[720px]">
+      <PageHead kicker={order.storeName} title={order.number} aside={<Tag tone={s.tone} className="text-[13px]">{s.label}</Tag>} />
 
-      <Card index={`01/${t.orderPage.delivery} ${fmt.date(order.deliveryDate)}`} title={order.supplierName}>
-        {(order.supplierPhone || order.supplierTelegram) && (
-          <p className="mt-2 text-[13px] text-text-2">{[order.supplierPhone, order.supplierTelegram].filter(Boolean).join(' · ')}</p>
-        )}
-        <div className="mt-3 flex items-baseline justify-between">
-          <MonoLabel>{t.requests.total}</MonoLabel>
-          <MoneyText value={order.totalAmount} className="text-lg" />
+      {error && (
+        <Banner tone="danger" onClose={() => {
+            action.reset()
+            send.reset()
+          }}>
+          {describeError(error, t)}
+        </Banner>
+      )}
+
+      <Blueprint className="mt-4 px-4 py-3.5">
+        <div className="font-head text-[22px]" style={{ fontWeight: 600 }}>
+          {order.supplierName}
         </div>
-        {order.confirmedTotal !== order.totalAmount && (
-          <div className="mt-1 flex items-baseline justify-between">
-            <MonoLabel>{t.orderPage.confirmedTotal}</MonoLabel>
-            <MoneyText value={order.confirmedTotal} />
+        {(order.supplierPhone || order.supplierTelegram) && (
+          <div className="flex flex-wrap gap-x-3.5 gap-y-1 text-[14px] text-n7">
+            {order.supplierPhone && <span>{order.supplierPhone}</span>}
+            {order.supplierTelegram && <span>{order.supplierTelegram}</span>}
           </div>
         )}
-        {order.warnings.includes('below_min_order') && (
-          <p className="mt-3 text-[12px] text-warning">{t.orderPage.belowMin(`${fmt.money(order.minOrderAmount)} ${t.common.currency}`)}</p>
-        )}
-        {order.responseDeadline && order.status === 'SENT' && (
-          <p className="mt-2 text-[12px] text-text-3">{`${t.orderPage.deadline}: ${fmt.date(order.responseDeadline)} ${fmt.time(order.responseDeadline)}`}</p>
-        )}
-        {order.cancelReason && <p className="mt-2 text-[12px] text-danger">{order.cancelReason}</p>}
-      </Card>
-
-      <section className="mt-6">
-        <MonoLabel className="mb-3">{`02/${t.requests.lines}`}</MonoLabel>
-        <div className="flex flex-col gap-2">
-          {order.lines.map((line) => (
-            <div key={line.id} className="rounded-row border border-border-soft bg-surface px-4 py-3 shadow-[var(--shadow-card)]">
-              <div className="flex items-start justify-between gap-3">
-                <div className="min-w-0">
-                  <div className="truncate text-[15px] font-semibold">{line.productName}</div>
-                  <div className="mt-0.5 text-[12px] text-text-2">
-                    {`${fmt.qty(line.qtyOrdered)} ${t.units[line.unit]}`}
-                    {(line.unit !== line.baseUnit || line.packFactor !== 1) &&
-                      ` (${fmt.qty(line.qtyOrdered * line.packFactor)} ${t.units[line.baseUnit]})`}
-                    {` × ${fmt.money(line.priceOrdered)}`}
-                  </div>
-                </div>
-                <MoneyText value={line.amount} className="shrink-0 text-[13px]" />
-              </div>
-              {line.response && (
-                <div className="mt-2 flex flex-wrap items-center gap-2 text-[12px]">
-                  <StatusBadge tone={line.response === 'confirmed' ? 'accent' : 'warning'}>{t.orderPage.responseKinds[line.response]}</StatusBadge>
-                  {line.response === 'price_changed' && line.priceConfirmed !== null && <span>{fmt.money(line.priceConfirmed)}</span>}
-                  {line.response === 'qty_changed' && line.qtyConfirmed !== null && (
-                    <span>{`${fmt.qty(line.qtyConfirmed)} ${t.units[line.unit]}`}</span>
-                  )}
-                  {line.needsReapproval && <StatusBadge tone="danger">{t.orderPage.needsReapproval}</StatusBadge>}
-                </div>
-              )}
+        <div className="mt-3 grid gap-3" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))' }}>
+          <div>
+            <div className="text-[13px] text-n7">{z.delivery}</div>
+            <div className="text-[17px] font-medium">{f.dt(order.deliveryDate)}</div>
+          </div>
+          <div>
+            <div className="text-[13px] text-n7">{z.total}</div>
+            <div className="whitespace-nowrap text-[17px] font-medium">{f.money(order.totalAmount)}</div>
+          </div>
+          {hasConf && (
+            <div>
+              <div className="text-[13px] text-n7">{z.confirmed_sum}</div>
+              <div className="whitespace-nowrap text-[17px] font-medium">{f.money(order.confirmedTotal)}</div>
             </div>
-          ))}
+          )}
         </div>
-      </section>
+      </Blueprint>
 
-      <FormError>{(action.error ?? send.error) && describeError(action.error ?? send.error, t)}</FormError>
+      {order.status === 'SENT' && order.responseDeadline && (
+        <Banner tone="info" icon={<Clock size={20} />}>
+          {`${z.resp_until} ${f.dtTime(order.responseDeadline)}`}
+        </Banner>
+      )}
+      {order.warnings.includes('below_min_order') && (
+        <Banner tone="warn">{`${z.min_order}: ${f.money(order.minOrderAmount)}`}</Banner>
+      )}
+      {order.cancelReason && (
+        <Banner tone="danger" icon={<X size={20} />}>
+          {`${z.cancel_reason}: ${order.cancelReason}`}
+        </Banner>
+      )}
+
+      <Section>{z.positions_pack}</Section>
+      {order.lines.map((line) => (
+        <OrderLineRow key={line.id} line={line} z={z} f={f} />
+      ))}
 
       {canSend && (
-        <section className="mt-6 flex flex-col gap-3">
-          <MonoLabel>{`03/${t.orderPage.channel}`}</MonoLabel>
-          <SegmentedControl
-            className="-mx-4 px-4"
-            segments={CHANNELS.map((value) => ({ value, label: t.orderPage.channels[value] }))}
-            value={channel}
-            onChange={setChannel}
-          />
-          <LaserButton size="lg" block icon={<Send size={16} />} loading={send.isPending} onClick={() => send.mutate()}>
-            {order.status === 'SENT' ? t.orderPage.resend : t.orderPage.send}
-          </LaserButton>
-        </section>
+        <>
+          <Section className="mb-2">{z.send_channel}</Section>
+          <Chips options={CHANNELS.map((c) => ({ value: c, label: channelLabel(z, c) }))} value={channel} onChange={setChannel} />
+          {order.status === 'SENT' && (
+            <Btn variant="ghost" className="mt-2" icon={<Send size={20} />} loading={send.isPending} onClick={() => send.mutate()}>
+              {z.a_resend}
+            </Btn>
+          )}
+        </>
       )}
 
       {sent && (
-        <Card index={t.orderPage.message} className="mt-4">
-          <pre className="mt-1 whitespace-pre-wrap break-words font-sans text-[13px] text-text-2">{sent.message}</pre>
-          <div className="mt-4 grid grid-cols-1 gap-2">
-            <LaserButton variant="ghost" icon={copied ? <Check size={14} /> : <Copy size={14} />} onClick={() => void copy()}>
-              {copied ? t.orderPage.copied : t.orderPage.copy}
-            </LaserButton>
+        <>
+          <Section className="mb-2">{z.msg_ready}</Section>
+          <div className="whitespace-pre-wrap break-words border border-line p-3 text-[14px]" style={{ background: 'var(--color-surface)' }}>{sent.message}</div>
+          <div className="mt-2 grid grid-cols-3 gap-2">
+            <Btn icon={<Copy size={20} />} onClick={() => void copy()}>
+              {z.a_copy}
+            </Btn>
             <a className="contents" href={shareUrl('telegram')} target="_blank" rel="noreferrer">
-              <LaserButton variant="ghost">{t.orderPage.shareTelegram}</LaserButton>
+              <Btn>Telegram</Btn>
             </a>
             <a className="contents" href={shareUrl('whatsapp')} target="_blank" rel="noreferrer">
-              <LaserButton variant="ghost">{t.orderPage.shareWhatsapp}</LaserButton>
+              <Btn>WhatsApp</Btn>
             </a>
           </div>
-        </Card>
+        </>
       )}
 
-      {canRespond && <ResponseForm lines={order.lines} onSubmit={(lines) => action.mutate(() => ordersApi.respond(order.id, lines))} busy={action.isPending} />}
+      <div className="mt-5 flex flex-wrap gap-x-4 gap-y-2">
+        {order.requestId && (
+          <Btn
+            variant="ghost"
+            icon={<ArrowLeft size={20} />}
+            onClick={() => navigate({ to: '/requests/$requestId', params: { requestId: order.requestId! } })}
+          >
+            {z.request}
+          </Btn>
+        )}
+        {sent && (
+          <a href={sent.response_url} target="_blank" rel="noreferrer" className="contents">
+            <Btn variant="ghost">
+              {z.as_supplier}
+              <ChevronRight size={20} />
+            </Btn>
+          </a>
+        )}
+      </div>
 
-      {order.status === 'REAPPROVAL' && isDecider && (
-        <LaserButton size="lg" block className="mt-6" icon={<Check size={16} />} loading={action.isPending} onClick={() => action.mutate(() => ordersApi.approveChanges(order.id))}>
-          {t.orderPage.approveChanges}
-        </LaserButton>
-      )}
+      <Sheet open={responding} title={z.supplier_resp} onClose={() => setResponding(false)}>
+        <ResponseForm
+          lines={order.lines}
+          busy={action.isPending}
+          onSubmit={(lines) =>
+            action.mutate({ fn: () => ordersApi.respond(order.id, lines), msg: z.toast_resp, after: () => setResponding(false) })
+          }
+        />
+        {action.error && <Banner tone="danger">{describeError(action.error, t)}</Banner>}
+      </Sheet>
 
-      {canCancel && (
-        <section className="mt-6 flex flex-col gap-2">
-          <TextField label={t.orderPage.cancelReason} maxLength={500} value={reason} onChange={(e) => setReason(e.target.value)} />
-          <LaserButton variant="danger" block icon={<X size={14} />} disabled={!reason.trim()} onClick={() => action.mutate(() => ordersApi.cancel(order.id, reason.trim()))}>
-            {t.orderPage.cancel}
-          </LaserButton>
-        </section>
-      )}
-
-      {order.requestId && (
-        <button
-          type="button"
-          className="mt-6 font-mono text-[10px] uppercase tracking-[0.2em] text-text-3"
-          onClick={() => navigate({ to: '/requests/$requestId', params: { requestId: order.requestId! } })}
+      <Sheet open={cancelling} title={z.cancel_po_title} onClose={() => setCancelling(false)}>
+        <Textarea
+          className="min-h-24"
+          value={reason}
+          maxLength={500}
+          placeholder={z.reason_ph}
+          onChange={(e) => setReason(e.target.value)}
+        />
+        <div className="mt-1.5 text-[13px] text-n7">{z.reason_req}</div>
+        {action.error && <Banner tone="danger">{describeError(action.error, t)}</Banner>}
+        <Btn
+          size="lg"
+          block
+          danger
+          className="mt-4"
+          style={{ borderColor: 'var(--zk-danger)' }}
+          disabled={!reason.trim()}
+          loading={action.isPending}
+          onClick={() =>
+            action.mutate({
+              fn: () => ordersApi.cancel(order.id, reason.trim()),
+              msg: z.toast_po_cancelled,
+              after: () => {
+                setCancelling(false)
+                setReason('')
+              },
+            })
+          }
         >
-          {`← ${t.orderPage.request}`}
-        </button>
+          {z.a_cancel_po}
+        </Btn>
+      </Sheet>
+    </div>
+  )
+}
+
+function OrderLineRow({ line, z, f }: { line: PurchaseOrderLine; z: Zk; f: ZkFormat }) {
+  const packed = line.unit !== line.baseUnit || line.packFactor !== 1
+  const qty = packed
+    ? `${f.n(line.qtyOrdered)} ${f.pack(line.unit)} (${f.qty(line.qtyOrdered * line.packFactor, line.baseUnit)})`
+    : f.qty(line.qtyOrdered, line.baseUnit)
+  let resp = ''
+  let color = 'var(--color-neutral-700)'
+  if (line.response === 'confirmed') {
+    resp = z.r_ok
+    color = 'var(--color-accent-700)'
+  } else if (line.response === 'price_changed') {
+    resp = `${z.r_price}${line.priceConfirmed !== null ? ` ${f.money(line.priceConfirmed)}` : ''}`
+    color = line.needsReapproval ? 'var(--zk-warn)' : 'var(--color-neutral-700)'
+  } else if (line.response === 'qty_changed') {
+    resp = `${z.r_qty}${line.qtyConfirmed !== null ? ` ${f.n(line.qtyConfirmed)} ${f.pack(line.unit)}` : ''}`
+    color = 'var(--zk-warn)'
+  } else if (line.response === 'out_of_stock') {
+    resp = z.r_no
+    color = 'var(--zk-danger)'
+  }
+  return (
+    <div className="grid grid-cols-[minmax(0,1fr)_auto] gap-x-3 gap-y-0.5 border-b border-line py-3">
+      <div className="text-[16px] font-medium">{line.productName}</div>
+      <div className="whitespace-nowrap text-[15px] font-medium">{f.money(line.amount)}</div>
+      <div className="col-span-full text-[14px] text-n7">{`${qty} × ${f.n(line.priceOrdered)}`}</div>
+      {line.response && (
+        <div className="col-span-full flex flex-wrap items-center gap-2 text-[14px]" style={{ color }}>
+          {`${z.supplier_says}: ${resp}`}
+          {line.needsReapproval && <Tag tone="warn">{z.over_tol}</Tag>}
+        </div>
       )}
     </div>
   )

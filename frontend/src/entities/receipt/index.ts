@@ -1,7 +1,7 @@
 import { queryOptions } from '@tanstack/react-query'
 import { apiRequest } from '@/shared/api/client'
 import type { UnitCode } from '@/shared/i18n/keys'
-import type { Tone } from '@/shared/ui'
+import type { Tone } from '@/shared/kit'
 
 export type ReceiptStatus = 'ACCEPTED' | 'DISPUTED'
 export type DiscrepancyKind = 'qty_over' | 'qty_under' | 'short' | 'price_up' | 'price_down' | 'defect'
@@ -82,8 +82,8 @@ export interface ReceiptDetail extends ReceiptListItem {
   iiko_document_number: string | null
 }
 
-export const RECEIPT_STATUS_TONE: Record<ReceiptStatus, Tone> = { ACCEPTED: 'accent', DISPUTED: 'warning' }
-export const EXPORT_STATUS_TONE: Record<ExportStatus, Tone> = { pending: 'info', exported: 'accent', failed: 'danger' }
+export const RECEIPT_STATUS_TONE: Record<ReceiptStatus, Tone> = { ACCEPTED: 'ok', DISPUTED: 'warn' }
+export const EXPORT_STATUS_TONE: Record<ExportStatus, Tone> = { pending: 'neutral', exported: 'ok', failed: 'danger' }
 
 export const RECEIPTS_KEY = ['receipts'] as const
 

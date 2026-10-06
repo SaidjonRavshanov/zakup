@@ -9,7 +9,6 @@ export {
 export {
   CHANNELS,
   ORDER_FILTERS,
-  PO_STATUS_TONE,
   RESPONSE_KINDS,
   type Channel,
   type OrderFilter,

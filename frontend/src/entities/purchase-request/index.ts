@@ -1,7 +1,6 @@
 import { queryOptions } from '@tanstack/react-query'
 import { apiRequest } from '@/shared/api/client'
 import type { PurchaseOrderStatusKey, UnitCode } from '@/shared/i18n/keys'
-import type { Tone } from '@/shared/ui'
 
 export type RequestStatus = 'DRAFT' | 'PENDING_APPROVAL' | 'APPROVED' | 'PARTIALLY_APPROVED' | 'REJECTED' | 'CANCELLED' | 'SPLIT'
 export type RequestType = 'manual' | 'event' | 'auto'
@@ -95,22 +94,12 @@ export interface RequestDetail extends Omit<RequestListItem, 'lines_count'> {
   orders: RequestOrder[]
 }
 
-export const REQUEST_STATUS_TONE: Record<RequestStatus, Tone> = {
-  DRAFT: 'neutral',
-  PENDING_APPROVAL: 'warning',
-  APPROVED: 'accent',
-  PARTIALLY_APPROVED: 'accent',
-  SPLIT: 'accent',
-  REJECTED: 'danger',
-  CANCELLED: 'neutral',
-}
-
 export type RequestFilter = 'active' | 'pending' | 'done' | 'all'
 
 export const REQUEST_FILTERS: Record<RequestFilter, ReadonlyArray<RequestStatus> | null> = {
-  active: ['DRAFT', 'PENDING_APPROVAL'],
+  active: ['DRAFT', 'PENDING_APPROVAL', 'APPROVED', 'PARTIALLY_APPROVED'],
   pending: ['PENDING_APPROVAL'],
-  done: ['APPROVED', 'PARTIALLY_APPROVED', 'SPLIT', 'REJECTED', 'CANCELLED'],
+  done: ['SPLIT', 'REJECTED', 'CANCELLED'],
   all: null,
 }
 

@@ -1,46 +1,33 @@
 import { LOCALES, setLocale, useI18n, type Locale } from '@/shared/i18n'
-import { cn } from '@/shared/lib/cn'
+import { Seg } from '@/shared/kit'
 import { telegram } from '@/shared/lib/telegram'
 
-const OPTIONS = Object.keys(LOCALES) as Locale[]
+const OPTIONS = [
+  { value: 'uz', label: "O'zbekcha" },
+  { value: 'ru', label: 'Русский' },
+] as const satisfies ReadonlyArray<{ value: Locale; label: string }>
 
 interface LanguageSwitchProps {
   className?: string
+  size?: 'sm' | 'md'
   /** Til tanlangandan keyin (masalan, profilga saqlash). */
   onChange?: (locale: Locale) => void
 }
 
-export function LanguageSwitch({ className, onChange }: LanguageSwitchProps) {
-  const { locale, t } = useI18n()
+export function LanguageSwitch({ className, size, onChange }: LanguageSwitchProps) {
+  const { locale } = useI18n()
   return (
-    <div
-      role="radiogroup"
-      aria-label={t.profile.language}
-      className={cn('grid grid-cols-2 gap-1 rounded-full border border-border p-1', className)}
-    >
-      {OPTIONS.map((value) => {
-        const active = locale === value
-        return (
-          <button
-            key={value}
-            role="radio"
-            aria-checked={active}
-            lang={value}
-            onClick={() => {
-              telegram.haptic.select()
-              setLocale(value)
-              if (!active) onChange?.(value)
-            }}
-            className={cn(
-              'flex h-10 items-center justify-center gap-2 rounded-full font-mono text-[10px] font-medium uppercase tracking-[0.18em] transition-colors duration-200',
-              active ? 'bg-accent text-accent-ink' : 'text-text-2',
-            )}
-          >
-            <span className={cn('tnum', active ? 'opacity-60' : 'text-text-3')}>{value}</span>
-            {LOCALES[value].label}
-          </button>
-        )
-      })}
-    </div>
+    <Seg
+      className={className}
+      size={size}
+      value={locale}
+      options={OPTIONS.filter((o) => o.value in LOCALES)}
+      onChange={(value) => {
+        if (value === locale) return
+        telegram.haptic.select()
+        setLocale(value)
+        onChange?.(value)
+      }}
+    />
   )
 }

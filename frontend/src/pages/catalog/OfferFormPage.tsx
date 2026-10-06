@@ -1,6 +1,6 @@
+/** /catalog/suppliers/$supplierId/offers/new va .../offers/$offerId — prototipda ekran yo'q, kit Field/Input/Chips bilan. */
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useNavigate, useParams } from '@tanstack/react-router'
-import { Archive, Save } from 'lucide-react'
 import { useEffect, useState, type FormEvent } from 'react'
 import {
   CATALOG_KEY,
@@ -14,25 +14,28 @@ import {
 } from '@/entities/catalog'
 import { describeError } from '@/shared/api/errors'
 import { useI18n } from '@/shared/i18n'
+import { useZk } from '@/shared/i18n/use-zk'
 import type { UnitCode } from '@/shared/i18n/keys'
 import { telegram } from '@/shared/lib/telegram'
-import { EmptyState, FormError, LaserButton, ListRow, MoneyText, MonoLabel, PageHeader, SelectField, Skeleton, TextField } from '@/shared/ui'
+import { Banner, Chips, Empty, Field, Input, KV, PageHead, RowsSkeleton, Section, confirmAction, toast, usePageActions } from '@/shared/kit'
+import { Select, SuffixInput } from './form-ui'
 
-/** /catalog/suppliers/$supplierId/offers/new va /catalog/suppliers/$supplierId/offers/$offerId */
 export default function OfferFormPage() {
   const { supplierId, offerId } = useParams({ strict: false })
+  const { z } = useZk()
   const { data: supplier, isPending } = useQuery(supplierQuery(supplierId!))
 
-  if (isPending) return <Skeleton className="mt-20 h-[300px]" />
+  if (isPending) return <RowsSkeleton n={4} />
   const offer = supplier?.offers.find((o) => o.id === offerId)
-  if (!supplier || (offerId && !offer)) return <EmptyState code="404" title="404" />
+  if (!supplier || (offerId && !offer)) return <Empty title={z.not_found} hint={z.not_found_hint} />
   return <OfferForm supplierId={supplier.id} supplierName={supplier.name} offer={offer} />
 }
 
 const decimal = (value: string) => value.replace(',', '.').replace(/[^\d.]/g, '')
 
 function OfferForm({ supplierId, supplierName, offer }: { supplierId: string; supplierName: string; offer?: Offer }) {
-  const { t, fmt } = useI18n()
+  const { t } = useI18n()
+  const { z, f } = useZk()
   const o = t.catalog.offer
   const navigate = useNavigate()
   const queryClient = useQueryClient()
@@ -49,14 +52,14 @@ function OfferForm({ supplierId, supplierName, offer }: { supplierId: string; su
     supplier_product_name: offer?.supplier_product_name ?? '',
     price: offer ? String(Number(offer.price)) : '',
   })
-  const set = <K extends keyof OfferInput>(key: K, value: OfferInput[K]) => setForm((f) => ({ ...f, [key]: value }))
+  const set = <K extends keyof OfferInput>(key: K, value: OfferInput[K]) => setForm((prev) => ({ ...prev, [key]: value }))
 
   const baseUnit: UnitCode = offer?.base_unit ?? products.find((p) => p.id === productId)?.base_unit ?? 'kg'
   const back = () => navigate({ to: '/catalog/suppliers/$supplierId', params: { supplierId } })
   useEffect(() => telegram.backButton(back))
 
   const done = async () => {
-    telegram.haptic.notify('success')
+    toast(z.toast_saved)
     await queryClient.invalidateQueries({ queryKey: CATALOG_KEY })
     void back()
   }
@@ -74,105 +77,88 @@ function OfferForm({ supplierId, supplierName, offer }: { supplierId: string; su
   })
   const archive = useMutation({ mutationFn: () => catalogApi.archiveOffer(offer!.id), onSuccess: done })
 
-  const submit = (event: FormEvent) => {
-    event.preventDefault()
-    save.mutate()
+  const ready = Boolean(offer || productId) && Number(form.pack_factor) > 0 && form.price !== ''
+  const submit = (event?: FormEvent) => {
+    event?.preventDefault()
+    if (ready && !save.isPending) save.mutate()
   }
-  const ready = (offer || productId) && Number(form.pack_factor) > 0 && form.price !== ''
+  const askArchive = async () => {
+    if (await confirmAction({ title: `${t.catalog.archive}?`, body: offer?.product_name, label: t.catalog.archive, cancel: z.cancel, danger: true }))
+      archive.mutate()
+  }
   const failure = save.error ?? archive.error
+  const unitPrice = Number(form.pack_factor) > 0 && form.price ? Number(form.price) / Number(form.pack_factor) : null
+
+  usePageActions({
+    primary: { label: z.a_save, onClick: () => submit(), disabled: !ready, loading: save.isPending },
+    secondary: offer && !offer.archived ? { label: t.catalog.archive, danger: true, onClick: () => void askArchive() } : null,
+  })
 
   return (
-    <form onSubmit={submit} className="animate-[enter_0.5s_var(--ease-expo)_both]">
-      <PageHeader meta={supplierName} title={offer ? o.edit : o.new} />
-      <div className="flex flex-col gap-4">
+    <form onSubmit={submit} className="mx-auto w-full max-w-[720px]">
+      <PageHead kicker={supplierName} title={offer ? o.edit : o.new} />
+      <div className="mt-4 flex flex-col gap-4">
         {offer ? (
-          <ListRow meta={o.product} title={offer.product_name} subtitle={t.units[offer.base_unit]} />
+          <KV rows={[[o.product, `${offer.product_name} · ${f.unit(offer.base_unit)}`]]} />
         ) : (
-          <SelectField
-            label={o.product}
-            required
-            value={productId}
-            options={[{ value: '', label: o.pickProduct }, ...products.map((p) => ({ value: p.id, label: `${p.name} · ${t.units[p.base_unit]}` }))]}
-            onChange={(e) => setProductId(e.target.value)}
-          />
+          <Field label={o.product}>
+            <Select
+              required
+              value={productId}
+              options={[{ value: '', label: o.pickProduct }, ...products.map((p) => ({ value: p.id, label: `${p.name} · ${f.unit(p.base_unit)}` }))]}
+              onChange={(e) => setProductId(e.target.value)}
+            />
+          </Field>
         )}
 
-        <div className="grid grid-cols-2 gap-3">
-          <SelectField
-            label={o.packUnit}
+        <Field label={o.packUnit}>
+          <Chips
+            options={PACK_UNITS.map((unit) => ({ value: unit, label: f.pack(unit) }))}
             value={form.pack_unit}
-            options={PACK_UNITS.map((unit) => ({ value: unit, label: t.units[unit] }))}
-            onChange={(e) => set('pack_unit', e.target.value as UnitCode)}
+            onChange={(unit: UnitCode) => set('pack_unit', unit)}
           />
-          <TextField
-            label={o.packFactor}
-            inputMode="decimal"
-            required
-            suffix={t.units[baseUnit]}
-            value={form.pack_factor}
-            onChange={(e) => set('pack_factor', decimal(e.target.value))}
-          />
-        </div>
-        <p className="-mt-2 px-2 text-[12px] text-text-3">{o.packFactorHint(t.units[baseUnit])}</p>
-        <TextField
-          label={o.multiple}
-          hint={o.multipleHint}
-          inputMode="decimal"
-          value={form.order_multiple}
-          onChange={(e) => set('order_multiple', decimal(e.target.value))}
-        />
+        </Field>
         <div className="grid grid-cols-2 gap-3">
-          <TextField label={o.sku} maxLength={100} value={form.supplier_sku ?? ''} onChange={(e) => set('supplier_sku', e.target.value)} />
-          <TextField
-            label={o.supplierName}
-            maxLength={300}
-            value={form.supplier_product_name ?? ''}
-            onChange={(e) => set('supplier_product_name', e.target.value)}
-          />
+          <Field label={o.packFactor}>
+            <SuffixInput
+              inputMode="decimal"
+              required
+              suffix={f.unit(baseUnit)}
+              value={form.pack_factor}
+              onChange={(e) => set('pack_factor', decimal(e.target.value))}
+            />
+          </Field>
+          <Field label={o.multiple}>
+            <Input inputMode="decimal" value={form.order_multiple} onChange={(e) => set('order_multiple', decimal(e.target.value))} />
+          </Field>
         </div>
-        <TextField
-          label={o.price}
-          inputMode="decimal"
-          required
-          suffix={t.common.currency}
-          value={form.price}
-          hint={
-            Number(form.pack_factor) > 0 && form.price
-              ? `${fmt.money(Number(form.price) / Number(form.pack_factor))} ${t.common.currency} / ${t.units[baseUnit]}`
-              : undefined
-          }
-          onChange={(e) => set('price', decimal(e.target.value))}
-        />
+        <div className="-mt-2 text-[13px] text-n7">{`${o.packFactorHint(f.unit(baseUnit))}. ${o.multipleHint}`}</div>
+        <div className="grid grid-cols-2 gap-3">
+          <Field label={o.sku}>
+            <Input maxLength={100} value={form.supplier_sku ?? ''} onChange={(e) => set('supplier_sku', e.target.value)} />
+          </Field>
+          <Field label={o.supplierName}>
+            <Input maxLength={300} value={form.supplier_product_name ?? ''} onChange={(e) => set('supplier_product_name', e.target.value)} />
+          </Field>
+        </div>
+        <Field label={o.price} hint={unitPrice !== null ? `${f.money(unitPrice)} / ${f.unit(baseUnit)}` : undefined}>
+          <SuffixInput inputMode="decimal" required suffix={z.sum} value={form.price} onChange={(e) => set('price', decimal(e.target.value))} />
+        </Field>
         {offer && (
-          <TextField label={o.validFrom} hint={o.validFromHint} type="date" value={validFrom} onChange={(e) => setValidFrom(e.target.value)} />
+          <Field label={o.validFrom} hint={o.validFromHint}>
+            <Input type="date" value={validFrom} onChange={(e) => setValidFrom(e.target.value)} />
+          </Field>
         )}
 
-        <FormError>{failure && describeError(failure, t)}</FormError>
-        <LaserButton type="submit" size="lg" block icon={<Save size={16} />} loading={save.isPending} disabled={!ready}>
-          {t.catalog.save}
-        </LaserButton>
-        {offer && !offer.archived && (
-          <LaserButton type="button" variant="danger" block icon={<Archive size={14} />} loading={archive.isPending} onClick={() => archive.mutate()}>
-            {t.catalog.archive}
-          </LaserButton>
-        )}
-
-        {history.length > 0 && (
-          <section className="mt-4">
-            <MonoLabel className="mb-3">{o.history}</MonoLabel>
-            <div className="rounded-card border border-border-soft bg-surface px-4">
-              {history.map((entry, i) => (
-                <div key={i} className="flex items-baseline justify-between gap-4 border-b border-border-soft py-2.5 last:border-0">
-                  <span className="text-[13px] text-text-2">
-                    {fmt.date(entry.valid_from)} · {t.priceSource[entry.source]}
-                  </span>
-                  <MoneyText value={Number(entry.price)} />
-                </div>
-              ))}
-            </div>
-          </section>
-        )}
+        {failure && <Banner tone="danger">{describeError(failure, t)}</Banner>}
       </div>
+
+      {history.length > 0 && (
+        <>
+          <Section>{o.history}</Section>
+          <KV rows={history.map((entry): [string, string] => [`${f.dt(entry.valid_from)} · ${t.priceSource[entry.source]}`, f.money(entry.price)])} />
+        </>
+      )}
     </form>
   )
 }

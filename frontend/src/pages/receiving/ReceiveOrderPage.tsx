@@ -1,78 +1,89 @@
 import { useQuery } from '@tanstack/react-query'
 import { useNavigate, useParams } from '@tanstack/react-router'
-import { AlertTriangle, Camera, Check } from 'lucide-react'
-import { useEffect, useState } from 'react'
+import { Camera, ChevronDown, ChevronUp, Info, WifiOff } from 'lucide-react'
+import { useEffect, useRef, useState } from 'react'
+import { purchaseOrdersQuery } from '@/entities/purchase-order'
 import { expectedOrderQuery, type ExpectedLine, type PaymentMethod } from '@/entities/receipt'
-import { useI18n } from '@/shared/i18n'
 import type { UnitCode } from '@/shared/i18n/keys'
-import { cn } from '@/shared/lib/cn'
+import { useZk } from '@/shared/i18n/use-zk'
+import { Banner, Blueprint, Btn, DropZone, Empty, Field, Input, Seg, Sheet, Skeleton, Stepper, Tag, toast, usePageActions } from '@/shared/kit'
 import { compressImage } from '@/shared/lib/image'
-import { telegram } from '@/shared/lib/telegram'
 import { uuid7 } from '@/shared/lib/uuid7'
 import { enqueueReceipt } from '@/shared/offline/outbox'
-import {
-  Card,
-  DiffIndicator,
-  EmptyState,
-  LaserButton,
-  MoneyText,
-  MonoLabel,
-  PageHeader,
-  QtyStepper,
-  SegmentedControl,
-  Skeleton,
-  TextField,
-} from '@/shared/ui'
+import { useOnline } from './use-online'
 
 // Ekrandagi ogohlantirish uchun; haqiqiy qaror — backend dopusklari (ZAKUP_RECEIVING_*)
 const WEIGHT_TOLERANCE_PCT = 3
 const DIVISIBLE_UNITS: ReadonlySet<UnitCode> = new Set(['kg', 'g', 'l', 'ml'])
 
+/** Foydalanuvchi kiritayotgan matnlar (vergul ham, nuqta ham). */
 interface LineFact {
-  qty: number
-  price: number
-  defect: number
-  defectReason: string
+  qty: string
+  price: string
+  defect: string
+  reason: string
   open: boolean
 }
 
-const decimal = (value: string) => value.replace(',', '.').replace(/[^\d.]/g, '')
+const parse = (raw: string) => {
+  const v = Number(raw.replace(/\s/g, '').replace(',', '.').replace(/[^\d.]/g, ''))
+  return Number.isFinite(v) ? v : 0
+}
+const raw = (value: number) => String(value).replace('.', ',')
 
 export default function ReceiveOrderPage() {
   const { orderId } = useParams({ from: '/shell/receiving/$orderId' })
-  const navigate = useNavigate()
-  const { t } = useI18n()
+  const { z } = useZk()
   const { data: order, isPending, isError } = useQuery(expectedOrderQuery(orderId))
 
-  useEffect(() => telegram.backButton(() => navigate({ to: '/receiving' })), [navigate])
-
-  if (isPending) return <Skeleton className="mt-20 h-96" />
-  if (isError || !order) return <EmptyState code="404" title={t.receiving.orderNotFound} />
+  if (isPending)
+    return (
+      <div className="flex flex-col gap-4 pt-2">
+        <Skeleton className="h-10 w-2/3" />
+        <Skeleton className="h-48" />
+        <Skeleton className="h-48" />
+      </div>
+    )
+  if (isError || !order) return <Empty title={z.not_found} />
   return <ReceiveForm orderId={order.order_id} number={order.number} lines={order.lines} />
 }
 
 function ReceiveForm({ orderId, number, lines }: { orderId: string; number: string; lines: ExpectedLine[] }) {
-  const { t, fmt } = useI18n()
+  const { z, f } = useZk()
   const navigate = useNavigate()
+  const online = useOnline()
+  // Sarlavha uchun (oflayn bo'lsa keshdagi ro'yxatdan)
+  const { data: po } = useQuery({ ...purchaseOrdersQuery(), select: (list) => list.find((o) => o.id === orderId) })
   // ID bir marta yaratiladi: qayta yuborish (oflayn navbat) shu ID bilan — dublikat bo'lmaydi
   const [receiptId] = useState(uuid7)
   const [facts, setFacts] = useState<Record<string, LineFact>>({})
   const [photo, setPhoto] = useState<Blob | null>(null)
+  const [photoName, setPhotoName] = useState('')
   const [preview, setPreview] = useState<string | null>(null)
+  const [photoOpen, setPhotoOpen] = useState(false)
   const [invoiceNo, setInvoiceNo] = useState('')
   const [method, setMethod] = useState<PaymentMethod>('transfer')
   const [saving, setSaving] = useState(false)
+  const fileRef = useRef<HTMLInputElement>(null)
 
   const factOf = (line: ExpectedLine): LineFact =>
-    facts[line.order_line_id] ?? { qty: Number(line.qty), price: Number(line.price), defect: 0, defectReason: '', open: false }
+    facts[line.order_line_id] ?? { qty: raw(Number(line.qty)), price: raw(Number(line.price)), defect: '0', reason: '', open: false }
   const update = (line: ExpectedLine, patch: Partial<LineFact>) =>
     setFacts((prev) => ({ ...prev, [line.order_line_id]: { ...factOf(line), ...patch } }))
+  /** Raqamlar: brak — qabul qilingan miqdordan oshmaydi. */
+  const numbers = (line: ExpectedLine) => {
+    const fact = factOf(line)
+    const qty = parse(fact.qty)
+    return { qty, price: parse(fact.price), defect: Math.min(parse(fact.defect), qty) }
+  }
 
   const total = lines.reduce((sum, line) => {
-    const fact = factOf(line)
-    return sum + Math.max(fact.qty - fact.defect, 0) * fact.price
+    const n = numbers(line)
+    return sum + Math.max(n.qty - n.defect, 0) * n.price
   }, 0)
-  const defectWithoutReason = lines.some((line) => factOf(line).defect > 0 && !factOf(line).defectReason.trim())
+  const ordered = lines.reduce((sum, line) => sum + Number(line.qty) * Number(line.price), 0)
+  const needsReason = (line: ExpectedLine) => numbers(line).defect > 0 && !factOf(line).reason.trim()
+  const defectWithoutReason = lines.some(needsReason)
 
   useEffect(() => () => {
     if (preview) URL.revokeObjectURL(preview)
@@ -82,158 +93,194 @@ function ReceiveForm({ orderId, number, lines }: { orderId: string; number: stri
     if (!file) return
     const compressed = await compressImage(file)
     setPhoto(compressed)
+    setPhotoName(file.name)
     setPreview(URL.createObjectURL(compressed))
   }
 
   const complete = async () => {
     if (!photo) return
     setSaving(true)
-    await enqueueReceipt({
-      id: receiptId,
-      orderId,
-      orderNumber: number,
-      photo,
-      photoType: photo.type || 'image/jpeg',
-      payload: {
+    try {
+      await enqueueReceipt({
         id: receiptId,
-        order_id: orderId,
-        supplier_invoice_no: invoiceNo.trim() || null,
-        payment_method: method,
-        lines: lines.map((line) => {
-          const fact = factOf(line)
-          return {
-            order_line_id: line.order_line_id,
-            qty: String(fact.qty),
-            price: String(fact.price),
-            qty_defect: String(fact.defect),
-            defect_reason: fact.defectReason.trim() || null,
-          }
-        }),
-      },
-    })
-    telegram.haptic.notify('success')
+        orderId,
+        orderNumber: number,
+        photo,
+        photoType: photo.type || 'image/jpeg',
+        payload: {
+          id: receiptId,
+          order_id: orderId,
+          supplier_invoice_no: invoiceNo.trim() || null,
+          payment_method: method,
+          lines: lines.map((line) => {
+            const n = numbers(line)
+            return {
+              order_line_id: line.order_line_id,
+              qty: String(n.qty),
+              price: String(n.price),
+              qty_defect: String(n.defect),
+              defect_reason: factOf(line).reason.trim() || null,
+            }
+          }),
+        },
+      })
+    } finally {
+      setSaving(false)
+    }
+    toast(z.toast_recv_saved)
     void navigate({ to: '/receiving', replace: true })
   }
 
-  return (
-    <div className="animate-[enter_0.5s_var(--ease-expo)_both]">
-      <PageHeader meta={number} title={t.receiving.title} />
+  usePageActions({
+    primary: { label: z.a_finish, onClick: () => void complete(), disabled: !photo || defectWithoutReason, loading: saving },
+  })
 
-      <div className="flex flex-col gap-2">
-        {lines.map((line, i) => {
+  return (
+    <div>
+      <div className="pt-2">
+        <div className="text-[14px] text-n7">{po ? `${number} · ${po.storeName} · ${f.dt(po.deliveryDate)}` : number}</div>
+        <h1 className="m-0 text-[32px]">{po?.supplierName ?? z.receiving}</h1>
+      </div>
+
+      {!online && (
+        <Banner tone="warn" icon={<WifiOff size={20} />}>
+          {z.offline_recv}
+        </Banner>
+      )}
+
+      <div className="mt-5 flex flex-col gap-5">
+        {lines.map((line) => {
           const fact = factOf(line)
-          const unit = t.units[line.base_unit]
-          const priceUp = fact.price > Number(line.price)
+          const n = numbers(line)
+          const unit = f.unit(line.base_unit)
+          const divisible = DIVISIBLE_UNITS.has(line.base_unit)
+          const tol = divisible ? WEIGHT_TOLERANCE_PCT : 0
+          const expected = Number(line.qty)
+          const dev = expected ? ((n.qty - expected) / expected) * 100 : 0
+          const out = Math.abs(dev) > tol + 1e-9
+          const needR = needsReason(line)
+          const priceUp = n.price > Number(line.price)
+          const extra =
+            (n.defect > 0 ? `${needR ? z.need_reason_short : `${z.defect} ${f.qty(n.defect, line.base_unit)}`} · ` : '') +
+            `${f.money(n.price)} / ${unit}`
           return (
-            <Card key={line.order_line_id} padded={false} className="p-4">
-              <div className="mb-3 flex items-start justify-between gap-3">
-                <div className="min-w-0">
-                  <MonoLabel className="mb-1.5">{`${String(i + 1).padStart(2, '0')}/${t.receiving.position}`}</MonoLabel>
-                  <div className="text-[15px] font-semibold">{line.product_name}</div>
-                </div>
-                <DiffIndicator
-                  expected={Number(line.qty)}
-                  actual={fact.qty}
-                  unit={unit}
-                  tolerancePct={DIVISIBLE_UNITS.has(line.base_unit) ? WEIGHT_TOLERANCE_PCT : 0}
-                />
+            <Blueprint key={line.order_line_id} className="p-3.5">
+              <div className="flex items-start justify-between gap-3">
+                <div className="text-[18px] font-medium leading-tight">{line.product_name}</div>
+                <Tag tone={out ? 'warn' : 'ok'} className="text-[13px]">
+                  {Math.abs(dev) < 1e-9 ? `= ${z.as_ordered}` : `${dev > 0 ? '▲' : '▼'} ${f.n(Math.abs(dev), 1)}%`}
+                </Tag>
               </div>
-              <QtyStepper
-                label={`${line.product_name} — ${t.receiving.fact}`}
+              <div className="mb-2.5 mt-0.5 text-[14px] text-n7">
+                {`${z.ordered}: ${f.qty(expected, line.base_unit)} · ${z.tol} ${tol ? `±${tol}%` : '0%'}`}
+              </div>
+              <Stepper
+                label={`${line.product_name} — ${z.receiving}`}
                 value={fact.qty}
-                step={DIVISIBLE_UNITS.has(line.base_unit) ? 0.5 : 1}
+                step={divisible ? 0.5 : 1}
                 unit={unit}
-                onChange={(qty) => update(line, { qty, defect: Math.min(fact.defect, qty) })}
+                onChange={(qty) => update(line, { qty })}
               />
               <button
                 type="button"
-                className="mt-3 flex w-full items-center justify-between text-[12px] text-text-2"
                 onClick={() => update(line, { open: !fact.open })}
+                className="mt-1.5 flex min-h-11 w-full items-center gap-2 text-left text-[14px] text-ink"
               >
-                <span>{`${t.receiving.price}: ${fmt.money(fact.price)} / ${unit}`}</span>
-                <span className={cn('flex items-center gap-1', (fact.defect > 0 || priceUp) && 'text-warning')}>
-                  {(fact.defect > 0 || priceUp) && <AlertTriangle size={12} />}
-                  {fact.defect > 0 ? `${t.receiving.defect}: ${fmt.qty(fact.defect)} ${unit}` : t.receiving.defect}
+                <span className="font-medium">{z.price_defect}</span>
+                <span className={needR ? 'flex-1 text-danger' : priceUp || n.defect > 0 ? 'flex-1 text-warn' : 'flex-1 text-n7'}>
+                  {extra}
                 </span>
+                {fact.open ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
               </button>
               {fact.open && (
-                <div className="mt-3 flex flex-col gap-3 border-t border-border-soft pt-3">
-                  <TextField
-                    label={t.receiving.price}
-                    inputMode="decimal"
-                    suffix={`${t.common.currency}/${unit}`}
-                    defaultValue={String(fact.price)}
-                    onChange={(e) => update(line, { price: Number(decimal(e.target.value)) || 0 })}
-                  />
-                  <TextField
-                    label={t.receiving.defectQty}
-                    inputMode="decimal"
-                    suffix={unit}
-                    defaultValue={fact.defect ? String(fact.defect) : ''}
-                    onChange={(e) => update(line, { defect: Math.min(Number(decimal(e.target.value)) || 0, fact.qty) })}
-                  />
-                  {fact.defect > 0 && (
-                    <TextField
-                      label={t.receiving.defectReason}
+                <>
+                  <div className="grid grid-cols-2 gap-2.5">
+                    <Field label={`${z.price_per} ${unit}`}>
+                      <Input inputMode="decimal" value={fact.price} onChange={(e) => update(line, { price: e.target.value })} />
+                    </Field>
+                    <Field label={`${z.defect}, ${unit}`}>
+                      <Input inputMode="decimal" value={fact.defect} onChange={(e) => update(line, { defect: e.target.value })} />
+                    </Field>
+                  </div>
+                  <Field label={z.defect_reason} className="mt-2.5">
+                    <Input
                       maxLength={500}
-                      value={fact.defectReason}
-                      onChange={(e) => update(line, { defectReason: e.target.value })}
+                      value={fact.reason}
+                      invalid={needR}
+                      placeholder={z.defect_reason_ph}
+                      onChange={(e) => update(line, { reason: e.target.value })}
                     />
-                  )}
-                </div>
+                  </Field>
+                </>
               )}
-            </Card>
+            </Blueprint>
           )
         })}
       </div>
 
-      <div className="mt-4 flex flex-col gap-3">
-        <TextField label={t.receiving.invoiceNo} maxLength={100} value={invoiceNo} onChange={(e) => setInvoiceNo(e.target.value)} />
-        <MonoLabel>{t.receiving.paymentMethod}</MonoLabel>
-        <SegmentedControl
-          segments={(['transfer', 'cash'] as const).map((value) => ({ value, label: t.paymentMethod[value] }))}
-          value={method}
-          onChange={setMethod}
-        />
+      <div className="mt-6 grid gap-3" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))' }}>
+        <Field label={z.inv_no}>
+          <Input maxLength={100} value={invoiceNo} placeholder="MB-2291" onChange={(e) => setInvoiceNo(e.target.value)} />
+        </Field>
+        <Field label={z.pay_method}>
+          <Seg
+            options={[
+              { value: 'transfer', label: z.pay_bank },
+              { value: 'cash', label: z.pay_cash },
+            ]}
+            value={method}
+            onChange={setMethod}
+          />
+        </Field>
       </div>
 
       {/* Nakladnoy fotosi majburiy (WORKFLOW B8) */}
-      <label
-        className={cn(
-          'mt-4 flex min-h-16 cursor-pointer items-center gap-3 rounded-row border border-dashed px-4 py-3 transition-colors',
-          photo ? 'border-[var(--accent-border)] bg-accent-wash' : 'border-border',
-        )}
-      >
-        {preview ? (
-          <img src={preview} alt="" className="size-12 shrink-0 rounded-md object-cover" />
-        ) : (
-          <span className="grid size-10 place-items-center rounded-full bg-surface-2 text-text-2">
-            <Camera size={18} />
-          </span>
-        )}
-        <span className="min-w-0 flex-1">
-          <MonoLabel className="mb-1">{t.receiving.invoicePhoto}</MonoLabel>
-          <span className="block truncate text-sm text-text-2">{photo ? `${Math.round(photo.size / 1024)} KB` : t.receiving.takePhoto}</span>
+      <div className="mb-2 mt-5 text-[13px] font-medium text-n7">{z.invoice_photo}</div>
+      <input
+        ref={fileRef}
+        type="file"
+        accept="image/*"
+        capture="environment"
+        className="sr-only"
+        onChange={(e) => {
+          void takePhoto(e.target.files?.[0])
+          e.target.value = ''
+        }}
+      />
+      {photo && preview ? (
+        <div className="flex items-center gap-3 border border-line p-2.5">
+          <button type="button" onClick={() => setPhotoOpen(true)} className="h-[76px] w-[60px] shrink-0 border border-line" aria-label={z.invoice_photo}>
+            <img src={preview} alt="" className="size-full object-cover" />
+          </button>
+          <div className="min-w-0 flex-1">
+            <div className="truncate text-[15px] font-medium">{photoName || z.invoice_photo}</div>
+            <div className="text-[13px] text-n7">{`${Math.round(photo.size / 1024)} ${z.kb}`}</div>
+          </div>
+          <Btn variant="ghost" onClick={() => fileRef.current?.click()}>
+            {z.a_reshoot}
+          </Btn>
+        </div>
+      ) : (
+        <DropZone icon={<Camera size={22} />} title={z.a_shoot} hint={z.photo_required} onClick={() => fileRef.current?.click()} />
+      )}
+
+      <div className="mt-3 flex items-baseline justify-between gap-3 border-t border-line pb-1 pt-4">
+        <span className="text-[15px] text-n7">{z.sum_fact}</span>
+        <span className="whitespace-nowrap font-head text-[28px]" style={{ fontWeight: 600 }}>
+          {f.money(total)}
         </span>
-        {photo && <Check size={18} className="text-accent-text" />}
-        <input type="file" accept="image/*" capture="environment" className="sr-only" onChange={(e) => void takePhoto(e.target.files?.[0])} />
-      </label>
-
-      <div className="mt-6 flex items-center justify-between">
-        <MonoLabel>{t.receiving.factTotal}</MonoLabel>
-        <MoneyText value={total} className="text-lg" />
       </div>
+      <div className="text-right text-[13px] text-n7">{`${z.ordered}: ${f.money(ordered)}`}</div>
+      {(!photo || defectWithoutReason) && (
+        <div className="mt-2.5 flex items-center gap-2 text-[14px] text-warn">
+          <Info size={20} />
+          {!photo ? z.need_photo : z.need_reason}
+        </div>
+      )}
 
-      <LaserButton
-        size="lg"
-        block
-        className="mt-4"
-        disabled={!photo || defectWithoutReason}
-        loading={saving}
-        onClick={() => void complete()}
-      >
-        {t.receiving.complete}
-      </LaserButton>
+      <Sheet open={photoOpen} title={invoiceNo.trim() ? `${z.invoice} ${invoiceNo.trim()}` : z.invoice_photo} onClose={() => setPhotoOpen(false)}>
+        {preview && <img src={preview} alt={z.invoice_photo} className="w-full border border-line" />}
+      </Sheet>
     </div>
   )
 }

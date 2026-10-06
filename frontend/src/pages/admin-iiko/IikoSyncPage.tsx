@@ -1,15 +1,13 @@
+/** iiko sinxroni (prototip "iiko", vmIiko): har server — blueprint karta, 4 tur + "Запустить"; pastda tarix. */
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Boxes, DatabaseZap, ReceiptText, TrendingDown, type LucideIcon } from 'lucide-react'
 import { useEffect } from 'react'
-import { iikoSyncQuery, requestIikoSync, type SyncKind, type SyncRun, type SyncStatus } from '@/entities/iiko'
 import { CATALOG_KEY } from '@/entities/catalog'
+import { iikoSyncQuery, requestIikoSync, type SyncKind, type SyncRun } from '@/entities/iiko'
 import { useHasRole } from '@/entities/user'
 import { describeError } from '@/shared/api/errors'
 import { useI18n } from '@/shared/i18n'
-import { telegram } from '@/shared/lib/telegram'
-import { Card, EmptyState, FormError, LaserButton, MonoLabel, PageHeader, Skeleton, StatusBadge, type Tone } from '@/shared/ui'
-
-const STATUS_TONE: Record<SyncStatus, Tone> = { queued: 'neutral', running: 'info', done: 'accent', failed: 'danger' }
+import { useZk, type ZkKey } from '@/shared/i18n/use-zk'
+import { Banner, Btn, Corners, Empty, RowsSkeleton, Section, Tag, status, toast } from '@/shared/kit'
 
 /** Natija: eng muhim sonlar (to'liq ro'yxat — backend logida). */
 const STAT_KEYS = [
@@ -25,15 +23,19 @@ const STAT_KEYS = [
 ] as const
 
 /** Har ertalab worker o'zi ham ishga tushiradi; tugmalar — qo'lda yangilash uchun. */
-const ACTIONS: ReadonlyArray<{ kind: SyncKind; icon: LucideIcon; days?: number }> = [
-  { kind: 'references', icon: DatabaseZap },
-  { kind: 'purchase_prices', icon: ReceiptText, days: 30 },
-  { kind: 'stock', icon: Boxes },
-  { kind: 'consumption', icon: TrendingDown, days: 28 },
+const KINDS: ReadonlyArray<{ kind: SyncKind; label: ZkKey; days?: number }> = [
+  { kind: 'references', label: 'ik_ref' },
+  { kind: 'purchase_prices', label: 'ik_prices', days: 30 },
+  { kind: 'stock', label: 'ik_stock' },
+  { kind: 'consumption', label: 'ik_usage', days: 28 },
 ]
 
+const LABEL = Object.fromEntries(KINDS.map((k) => [k.kind, k.label])) as Record<SyncKind, ZkKey>
+const active = (run?: SyncRun) => run?.status === 'queued' || run?.status === 'running'
+
 export default function IikoSyncPage() {
-  const { t, fmt } = useI18n()
+  const { t } = useI18n()
+  const { z, f } = useZk()
   const queryClient = useQueryClient()
   const isAdmin = useHasRole('admin')
   const { data, isPending, error } = useQuery(iikoSyncQuery)
@@ -41,7 +43,7 @@ export default function IikoSyncPage() {
   const request = useMutation({
     mutationFn: requestIikoSync,
     onSuccess: () => {
-      telegram.haptic.notify('success')
+      toast(z.job_queued)
       return queryClient.invalidateQueries({ queryKey: iikoSyncQuery.queryKey })
     },
   })
@@ -52,88 +54,85 @@ export default function IikoSyncPage() {
     if (lastDone) void queryClient.invalidateQueries({ queryKey: CATALOG_KEY })
   }, [lastDone, queryClient])
 
-  if (isPending) return <Skeleton className="mt-20 h-[300px]" />
-  if (error || !data) return <EmptyState code="403" title={t.errors.permission_denied} />
+  if (isPending) return <RowsSkeleton n={5} />
+  if (error || !data) return <Empty title={z.not_found} hint={z.not_found_hint} />
 
   const latest = (server: string, kind: SyncKind) => data.runs.find((r) => r.server_code === server && r.kind === kind)
-  const busy = (server: string, kind: SyncKind) => {
-    const run = latest(server, kind)
-    return run?.status === 'queued' || run?.status === 'running'
-  }
+  const serverName = (code: string) => data.servers.find((s) => s.code === code)?.name ?? code
 
   return (
-    <div className="animate-[enter_0.5s_var(--ease-expo)_both]">
-      <PageHeader meta={t.iiko.meta} title={t.iiko.title} />
-      <p className="-mt-2 mb-4 text-[13px] text-text-2">{t.iiko.hint}</p>
+    <div>
+      <div className="flex items-baseline justify-between gap-3 pt-2">
+        <h1 className="m-0 text-[34px]">{z.iiko_sync}</h1>
+        {data.runs.some(active) && <span className="text-[13px] text-a7">{z.auto_refresh}</span>}
+      </div>
 
-      {data.servers.length === 0 && <EmptyState code="0" title={t.iiko.noServers} description={t.iiko.noServersHint} />}
+      {data.servers.length === 0 && <Empty title={t.iiko.noServers} hint={t.iiko.noServersHint} />}
+      {request.error && <Banner tone="danger">{describeError(request.error, t)}</Banner>}
 
-      <div className="flex flex-col gap-3">
-        {data.servers.map((server, i) => {
-          return (
-            <Card key={server.code} index={`0${i + 1}/${t.iiko.department} ${server.department_code ?? '—'}`} title={server.name}>
-              <div className="mt-3 grid grid-cols-2 gap-2 text-[12px] text-text-2">
-                {ACTIONS.map(({ kind }) => {
-                  const run = latest(server.code, kind)
-                  return (
-                    <span key={kind}>
-                      {t.iiko.kind[kind]}: {run?.finished_at ? `${fmt.date(run.finished_at)} ${fmt.time(run.finished_at)}` : '—'}
-                    </span>
-                  )
-                })}
-              </div>
-              {isAdmin && (
-                <div className="mt-4 grid grid-cols-2 gap-2">
-                  {ACTIONS.map(({ kind, icon: Icon, days }) => (
-                    <LaserButton
-                      key={kind}
-                      variant="ghost"
-                      icon={<Icon size={14} />}
-                      loading={busy(server.code, kind)}
+      <div className="mt-4 grid gap-5" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))' }}>
+        {data.servers.map((server) => (
+          <div key={server.code} className="blueprint px-3.5 py-3">
+            <Corners />
+            <div className="font-head text-[22px]" style={{ fontWeight: 600 }}>
+              {server.name}
+            </div>
+            {KINDS.map(({ kind, label, days }) => {
+              const run = latest(server.code, kind)
+              const busy = active(run)
+              const failed = run?.status === 'failed'
+              const at = run ? f.dtTime(run.finished_at ?? run.created_at) : '—'
+              return (
+                <div key={kind} className="flex min-h-12 items-center gap-3 border-t border-line">
+                  <div className="min-w-0 flex-1">
+                    <div className="text-[15px]">{z[label]}</div>
+                    <div
+                      className="text-[13px]"
+                      style={{ color: busy ? 'var(--color-accent-700)' : failed ? 'var(--zk-danger)' : 'var(--color-neutral-700)' }}
+                    >
+                      {busy ? z.job_run : run ? `${failed ? z.err_last : z.last_ok} · ${at}` : '—'}
+                    </div>
+                  </div>
+                  {isAdmin && (
+                    <Btn
+                      className="min-h-10 min-w-[84px]"
+                      disabled={busy}
+                      style={{ opacity: busy ? 0.5 : 1 }}
                       onClick={() => request.mutate({ server_code: server.code, kind, days })}
                     >
-                      {t.iiko.kind[kind]}
-                    </LaserButton>
-                  ))}
+                      {busy ? '…' : z.a_run}
+                    </Btn>
+                  )}
                 </div>
-              )}
-            </Card>
-          )
-        })}
-      </div>
-
-      <FormError>{request.error && describeError(request.error, t)}</FormError>
-
-      <section className="mt-6">
-        <MonoLabel className="mb-3">{t.iiko.history}</MonoLabel>
-        {data.runs.length === 0 ? (
-          <p className="px-2 text-sm text-text-3">{t.iiko.noRuns}</p>
-        ) : (
-          <div className="flex flex-col gap-2">
-            {data.runs.map((run) => (
-              <RunRow key={run.id} run={run} serverName={data.servers.find((s) => s.code === run.server_code)?.name} />
-            ))}
+              )
+            })}
           </div>
-        )}
-      </section>
-    </div>
-  )
-}
-
-function RunRow({ run, serverName }: { run: SyncRun; serverName?: string }) {
-  const { t, fmt } = useI18n()
-  const stats = STAT_KEYS.filter((key) => run.stats[key]).map((key) => `${t.iiko.stats[key]}: ${fmt.qty(run.stats[key] ?? 0)}`)
-  return (
-    <div className="rounded-row border border-border-soft bg-surface px-4 py-3 shadow-[var(--shadow-card)]">
-      <div className="flex items-center justify-between gap-3">
-        <div className="min-w-0">
-          <MonoLabel className="mb-1.5 truncate">{`${serverName ?? run.server_code} · ${fmt.date(run.created_at)} ${fmt.time(run.created_at)}`}</MonoLabel>
-          <div className="text-[15px] font-semibold">{t.iiko.kind[run.kind]}</div>
-        </div>
-        <StatusBadge tone={STATUS_TONE[run.status]}>{t.iiko.status[run.status]}</StatusBadge>
+        ))}
       </div>
-      {stats.length > 0 && <p className="mt-2 text-[12px] text-text-2">{stats.join(' · ')}</p>}
-      {run.error && <p className="mt-2 break-words text-[12px] text-danger">{run.error}</p>}
+
+      <Section>{z.history}</Section>
+      {data.runs.length === 0 ? (
+        <div className="py-4 text-[15px] text-n7">{t.iiko.noRuns}</div>
+      ) : (
+        data.runs.map((run) => {
+          const s = status(z, 'job', run.status)
+          const stats = STAT_KEYS.filter((key) => run.stats[key]).map((key) => `${t.iiko.stats[key]}: ${f.n(run.stats[key] ?? 0)}`)
+          return (
+            <div key={run.id} className="grid grid-cols-[minmax(0,1fr)_auto] gap-x-3 gap-y-0.5 border-b border-line py-3">
+              <div className="text-[15px] font-medium">
+                {serverName(run.server_code)} · {z[LABEL[run.kind]]}
+              </div>
+              <Tag tone={s.tone} className="justify-self-end">
+                {s.label}
+              </Tag>
+              <div className="col-span-2 text-[13px] text-n7">
+                {f.dtTime(run.created_at)} · {stats.length ? stats.join(' · ') : '—'}
+              </div>
+              {run.error && <div className="col-span-2 break-words text-[13px] text-danger">{run.error}</div>}
+            </div>
+          )
+        })
+      )}
     </div>
   )
 }
