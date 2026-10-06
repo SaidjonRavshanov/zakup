@@ -2,12 +2,10 @@
 import { useQuery } from '@tanstack/react-query'
 import { useNavigate, useParams } from '@tanstack/react-router'
 import { FileText, Plus } from 'lucide-react'
-import { useEffect } from 'react'
 import { OfferRow, WEEKDAYS, supplierQuery } from '@/entities/catalog'
 import { meQuery, useActiveRole, useHasRole } from '@/entities/user'
 import { useI18n } from '@/shared/i18n'
 import { useZk } from '@/shared/i18n/use-zk'
-import { telegram } from '@/shared/lib/telegram'
 import { Btn, Empty, KV, PageHead, RowsSkeleton, Section, Skeleton, Tag, usePageActions } from '@/shared/kit'
 import { methodsLabel, termsLabel, weekdayNames } from './format'
 
@@ -40,7 +38,6 @@ export default function SupplierPage() {
   const role = useActiveRole(me)
   const { data: supplier, isPending, error } = useQuery(supplierQuery(supplierId))
 
-  useEffect(() => telegram.backButton(() => navigate({ to: '/catalog', search: { tab: 'suppliers' } })), [navigate])
 
   usePageActions({
     secondary:

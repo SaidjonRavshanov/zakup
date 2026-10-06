@@ -91,7 +91,7 @@ function Suppliers() {
   return (
     <>
       {/* desktop: jadval */}
-      <table className="table mt-3 hidden lg:table">
+      <table className="zk-table mt-3 hidden lg:table">
         <thead>
           <tr>
             <th>{z.supplier}</th>

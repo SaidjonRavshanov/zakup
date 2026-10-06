@@ -1,7 +1,7 @@
 /** /catalog/suppliers/$supplierId/offers/new va .../offers/$offerId — prototipda ekran yo'q, kit Field/Input/Chips bilan. */
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useNavigate, useParams } from '@tanstack/react-router'
-import { useEffect, useState, type FormEvent } from 'react'
+import { useState, type FormEvent } from 'react'
 import {
   CATALOG_KEY,
   PACK_UNITS,
@@ -16,7 +16,6 @@ import { describeError } from '@/shared/api/errors'
 import { useI18n } from '@/shared/i18n'
 import { useZk } from '@/shared/i18n/use-zk'
 import type { UnitCode } from '@/shared/i18n/keys'
-import { telegram } from '@/shared/lib/telegram'
 import { Banner, Chips, Empty, Field, Input, KV, PageHead, RowsSkeleton, Section, confirmAction, toast, usePageActions } from '@/shared/kit'
 import { Select, SuffixInput } from './form-ui'
 
@@ -56,7 +55,6 @@ function OfferForm({ supplierId, supplierName, offer }: { supplierId: string; su
 
   const baseUnit: UnitCode = offer?.base_unit ?? products.find((p) => p.id === productId)?.base_unit ?? 'kg'
   const back = () => navigate({ to: '/catalog/suppliers/$supplierId', params: { supplierId } })
-  useEffect(() => telegram.backButton(back))
 
   const done = async () => {
     toast(z.toast_saved)

@@ -1,7 +1,7 @@
 /** /catalog/suppliers/new va /catalog/suppliers/$supplierId/edit — prototipda ekran yo'q, kit Field/Input/Seg/Chips bilan. */
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useNavigate, useParams } from '@tanstack/react-router'
-import { useEffect, useState, type FormEvent } from 'react'
+import { useState, type FormEvent } from 'react'
 import {
   CATALOG_KEY,
   PAYMENT_TERMS,
@@ -15,7 +15,6 @@ import {
 import { describeError } from '@/shared/api/errors'
 import { useI18n } from '@/shared/i18n'
 import { useZk } from '@/shared/i18n/use-zk'
-import { telegram } from '@/shared/lib/telegram'
 import { Banner, Chips, Empty, Field, Input, PageHead, RowsSkeleton, Seg, confirmAction, toast, usePageActions } from '@/shared/kit'
 import { FormSection, SuffixInput } from './form-ui'
 import { weekdayNames } from './format'
@@ -57,12 +56,6 @@ function SupplierForm({ supplier }: { supplier?: SupplierDetail }) {
   const set = <K extends keyof SupplierInput>(key: K, value: SupplierInput[K]) => setForm((prev) => ({ ...prev, [key]: value }))
   const setContact = (key: keyof SupplierInput['contacts'], value: string) =>
     setForm((prev) => ({ ...prev, contacts: { ...prev.contacts, [key]: value } }))
-
-  const back = () =>
-    supplier
-      ? navigate({ to: '/catalog/suppliers/$supplierId', params: { supplierId: supplier.id } })
-      : navigate({ to: '/catalog', search: { tab: 'suppliers' } })
-  useEffect(() => telegram.backButton(back))
 
   const done = async (id: string) => {
     toast(z.toast_saved)

@@ -36,7 +36,7 @@ export default function TodoPage() {
               { label: z.month_buy, value: f.cmp(summary.purchases) },
               { label: z.kp_pending, value: summary.pending_requests },
               { label: z.kp_debt, value: f.cmp(summary.debt) },
-              { label: z.kp_overdue, value: f.cmp(summary.overdue), color: 'var(--zk-danger)' },
+              { label: z.kp_overdue, value: f.cmp(summary.overdue), color: Number(summary.overdue) > 0 ? 'var(--zk-danger)' : undefined },
             ]}
           />
         </>

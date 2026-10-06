@@ -6,7 +6,7 @@
 import { useQuery } from '@tanstack/react-query'
 import { Outlet, useRouter, useRouterState } from '@tanstack/react-router'
 import { ChevronLeft, Ellipsis } from 'lucide-react'
-import { useEffect, useState, useSyncExternalStore } from 'react'
+import { useEffect, useRef, useState, useSyncExternalStore } from 'react'
 import { meQuery, useActiveRole } from '@/entities/user'
 import { useTodo } from '@/features/todo'
 import { useZk } from '@/shared/i18n/use-zk'
@@ -52,15 +52,24 @@ export function AppShell() {
   }
 
   // Telegram BackButton — faqat ichki sahifalarda
-  useEffect(() => (root ? telegram.backButton(null) : telegram.backButton(back)))
-  useEffect(() => window.scrollTo(0, 0), [path])
+  const backRef = useRef(back)
+  useEffect(() => {
+    backRef.current = back
+  })
+  useEffect(() => {
+    if (root) return telegram.backButton(null)
+    return telegram.backButton(() => backRef.current())
+  }, [root])
+  useEffect(() => {
+    window.scrollTo(0, 0)
+  }, [path])
 
   const phoneItems: Array<NavKey | 'more'> = menu.length > 5 ? [...menu.slice(0, 4), 'more'] : menu
   const moreItems = menu.length > 5 ? menu.slice(4) : []
   const count = (k: NavKey) => (k === 'home' ? todo.length : 0)
 
   return (
-    <div className="min-h-dvh bg-ground text-ink lg:pl-[232px]">
+    <div className="flex min-h-dvh flex-col bg-ground text-ink lg:pl-[232px]">
       {desktop && (
         <aside className="fixed inset-y-0 left-0 z-20 flex w-[232px] flex-col gap-0.5 overflow-y-auto border-r border-line px-3 py-5">
           <div className="px-2.5 pb-[18px]">
@@ -99,7 +108,7 @@ export function AppShell() {
 
       <main
         className={cn(
-          'mx-auto px-4 pb-7 pt-3 lg:px-8 lg:pb-12 lg:pt-6',
+          'mx-auto w-full flex-1 px-4 pb-7 pt-3 lg:px-8 lg:pb-12 lg:pt-6',
           desktop ? (isWidePath(path) ? 'max-w-[1104px]' : 'max-w-[784px]') : 'max-w-[640px]',
         )}
         style={{ paddingTop: desktop ? undefined : 'max(12px, env(safe-area-inset-top))' }}

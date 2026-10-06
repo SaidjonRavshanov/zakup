@@ -45,7 +45,7 @@ export default function FinancePage() {
         cols={2}
         items={[
           { label: z.debt, value: f.money(sum(debts, 'debt')) },
-          { label: z.overdue, value: f.money(sum(debts, 'overdue')), color: 'var(--zk-danger)' },
+          { label: z.overdue, value: f.money(sum(debts, 'overdue')), color: sum(debts, 'overdue') > 0 ? 'var(--zk-danger)' : undefined },
         ]}
       />
 
@@ -67,7 +67,7 @@ export default function FinancePage() {
         ) : (
           <>
             {/* Desktop — jadval */}
-            <table className="table mt-3 hidden lg:table">
+            <table className="zk-table mt-3 hidden lg:table">
               <thead>
                 <tr>
                   <th>{z.supplier}</th>

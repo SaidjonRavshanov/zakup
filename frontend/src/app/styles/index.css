@@ -11,7 +11,7 @@
 
 @import 'tailwindcss';
 @import './tokens.css';
-@import './industry.css';
+@import './industry.css' layer(components);
 
 /* Tokenlar → Tailwind utility'lari: bg-ground, text-ink, border-line, text-n7, bg-a1, text-warn ...
    (nomlar boshqacha: --color-bg o'ziga havola bo'lib qolmasin) */
@@ -80,3 +80,5 @@
 
 /* Bosiladigan qatorlar / kartochkalar — prototipdagi style-hover */
 .zk-hover:hover { background: color-mix(in srgb, var(--color-text) 4%, transparent); }
+.zk-noscroll { scrollbar-width: none; }
+.zk-noscroll::-webkit-scrollbar { display: none; }

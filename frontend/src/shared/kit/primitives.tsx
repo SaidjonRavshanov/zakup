@@ -156,7 +156,7 @@ interface SegProps<T extends string> {
 /** Segment: bitta ramkada yonma-yon tugmalar, tanlangani — accent fon. */
 export function Seg<T extends string>({ options, value, onChange, scroll, size = 'md', className }: SegProps<T>) {
   return (
-    <div className={cn('flex border border-line', scroll && 'overflow-x-auto', className)} role="tablist">
+    <div className={cn('flex border border-line', scroll && 'zk-noscroll overflow-x-auto', className)} role="tablist">
       {options.map((o) => {
         const on = o.value === value
         return (
@@ -516,7 +516,8 @@ export function SearchInput({
       <Search size={20} className="pointer-events-none absolute left-3 top-3 text-n7" />
       <input
         type="search"
-        className="input min-h-11 pl-10 text-[16px]"
+        className="input min-h-11 text-[16px]"
+        style={{ paddingLeft: 40 }}
         value={value}
         autoFocus={autoFocus}
         placeholder={placeholder}

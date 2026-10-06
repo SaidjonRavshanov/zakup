@@ -2,14 +2,13 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useNavigate, useParams } from '@tanstack/react-router'
 import { Plus } from 'lucide-react'
-import { useEffect, useState, type FormEvent } from 'react'
+import { useState, type FormEvent } from 'react'
 import { BASE_UNITS, CATALOG_KEY, catalogApi, categoriesQuery, productQuery, type ProductDetail, type ProductInput } from '@/entities/catalog'
 import { useHasRole } from '@/entities/user'
 import { describeError } from '@/shared/api/errors'
 import { useI18n } from '@/shared/i18n'
 import { useZk } from '@/shared/i18n/use-zk'
 import type { UnitCode } from '@/shared/i18n/keys'
-import { telegram } from '@/shared/lib/telegram'
 import { Banner, Btn, Empty, Field, Input, PageHead, RowsSkeleton, Seg, confirmAction, toast, usePageActions } from '@/shared/kit'
 import { Select } from './form-ui'
 
@@ -38,12 +37,6 @@ function ProductForm({ product }: { product?: ProductDetail }) {
     category_id: product?.category_id ?? null,
   })
   const [newCategory, setNewCategory] = useState('')
-
-  const back = () =>
-    product
-      ? navigate({ to: '/catalog/products/$productId', params: { productId: product.id } })
-      : navigate({ to: '/catalog', search: { tab: 'products' } })
-  useEffect(() => telegram.backButton(back))
 
   const done = async (id: string) => {
     toast(z.toast_saved)

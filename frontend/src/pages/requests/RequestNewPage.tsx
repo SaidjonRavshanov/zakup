@@ -8,7 +8,7 @@ import { meQuery } from '@/entities/user'
 import { describeError } from '@/shared/api/errors'
 import { useI18n } from '@/shared/i18n'
 import { useZk } from '@/shared/i18n/use-zk'
-import { Banner, Btn, Chips, Field, PageHead, Section, Seg, Textarea, TotalLine, toast, usePageActions } from '@/shared/kit'
+import { Banner, Btn, Field, PageHead, Picker, Section, Seg, Textarea, TotalLine, toast, usePageActions } from '@/shared/kit'
 import { AddProductSheet, type PickedProduct } from './AddProductSheet'
 import { packInfo, parseQty, qtyBody } from './labels'
 
@@ -102,8 +102,9 @@ export default function RequestNewPage() {
       <PageHead title={z.new_req} sub={z.new_req_sub} />
 
       <Section className="mb-2 mt-5">{z.store}</Section>
-      <Chips
-        options={allowed.map((s) => ({ value: s.id, label: s.branch_name ? `${s.name} · ${s.branch_name}` : s.name }))}
+      <Picker
+        title={z.store}
+        options={allowed.map((s) => ({ value: s.id, label: s.name, sub: s.branch_name }))}
         value={store}
         onChange={setStoreId}
       />

@@ -14,7 +14,7 @@ Prototype is served at http://127.0.0.1:8099/Zakup%20Prototype.dc.html. Mock dat
 - Main actions of a screen go to the sticky bottom bar: `usePageActions({ primary: {label, onClick, disabled, loading}, secondary: {label, onClick, danger} })` (prototype `vmX().primary/secondary`). Do not render these buttons inline.
 - Confirm irreversible actions: `if (await confirmAction({ title, body: z.cf_irrev, label, cancel: z.a_cancel, danger: true })) ...`. Success feedback: `toast(z.toast_xxx)`.
 - Back navigation is automatic (Telegram BackButton / desktop "Назад"). Don't render back buttons. Bottom nav is only on root sections.
-- Phone first (width 360–430), but desktop ≥1024 must look good (content max 1040px for lists, 720px detail). Tables on desktop for finance debts / analytics suppliers (`table` class) — prototype shows them.
+- Phone first (width 360–430), but desktop ≥1024 must look good (content max 1040px for lists, 720px detail). Tables on desktop for finance debts / analytics suppliers (`zk-table` class) — prototype shows them.
 - Icons: lucide-react, size 20 (inline) / 22 (nav). Stroke is 1.5 globally.
 - Tailwind colors: `bg-ground text-ink border-line text-n7 bg-n2 bg-a1 text-a7 text-a8 bg-acc text-warn bg-warnbg text-danger bg-dangerbg`; font `font-head` (Barlow Condensed — always with `style={{fontWeight:600}}`). Arbitrary sizes like `text-[15px]` match the prototype.
 - Square corners everywhere. No rounded, no shadows on cards. Hairline `border-line`.

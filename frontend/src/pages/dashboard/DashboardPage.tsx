@@ -9,18 +9,19 @@ import { meQuery, useActiveRole, useHasRole } from '@/entities/user'
 import { TodoList, useTodo } from '@/features/todo'
 import { healthQuery } from '@/shared/api/health'
 import { todayIso, useZk } from '@/shared/i18n/use-zk'
-import { Banner, Blueprint, Btn, Cells, Corners, Empty, Row, RowsSkeleton, Section, Tag, status } from '@/shared/kit'
+import { Banner, Blueprint, Btn, Cells, Corners, Row, RowsSkeleton, Section, Tag, status } from '@/shared/kit'
 import { usePendingReceipts } from '@/shared/offline/outbox'
 
 const FULL = ['buyer', 'approver', 'accountant', 'auditor', 'admin']
 
+// Brauzerlarda o'zbekcha Intl ma'lumoti yo'q ("M10 6, Tue") — nomlarni o'zimiz beramiz
+const UZ_DAYS = ['Yakshanba', 'Dushanba', 'Seshanba', 'Chorshanba', 'Payshanba', 'Juma', 'Shanba']
+const UZ_MONTHS = ['yanvar', 'fevral', 'mart', 'aprel', 'may', 'iyun', 'iyul', 'avgust', 'sentabr', 'oktabr', 'noyabr', 'dekabr']
+
 function longDate(locale: 'ru' | 'uz'): string {
-  const s = new Intl.DateTimeFormat(locale === 'ru' ? 'ru-RU' : 'uz-Latn-UZ', {
-    weekday: 'long',
-    day: 'numeric',
-    month: 'long',
-    timeZone: 'Asia/Tashkent',
-  }).format(new Date())
+  const now = new Date(Date.now() + 5 * 3600_000) // Toshkent
+  if (locale === 'uz') return `${UZ_DAYS[now.getUTCDay()]}, ${now.getUTCDate()}-${UZ_MONTHS[now.getUTCMonth()]}`
+  const s = new Intl.DateTimeFormat('ru-RU', { weekday: 'long', day: 'numeric', month: 'long', timeZone: 'UTC' }).format(now)
   return s.charAt(0).toUpperCase() + s.slice(1)
 }
 
@@ -30,7 +31,7 @@ export default function DashboardPage() {
   const { data: me } = useQuery(meQuery)
   const role = useActiveRole(me)
   const full = role !== null && FULL.includes(role)
-  const canCreate = useHasRole('initiator', 'buyer', 'admin')
+  const canCreate = role === 'initiator' || role === 'buyer' || role === 'admin'
   const canReceive = useHasRole('storekeeper', 'buyer', 'admin')
 
   const health = useQuery(healthQuery)
@@ -170,7 +171,7 @@ export default function DashboardPage() {
               )
             })
           )}
-          {!isPending && !today.length && <Empty className="py-4 text-left" title="" hint={z.no_deliveries} />}
+          {!isPending && !today.length && <div className="py-4 text-[15px] text-n7">{z.no_deliveries}</div>}
         </>
       )}
 

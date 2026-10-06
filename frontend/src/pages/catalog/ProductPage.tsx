@@ -2,7 +2,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useNavigate, useParams } from '@tanstack/react-router'
 import { ChevronRight } from 'lucide-react'
-import { useEffect } from 'react'
+import { useState } from 'react'
 import {
   CATALOG_KEY,
   OfferRow,
@@ -18,8 +18,8 @@ import { useHasRole } from '@/entities/user'
 import { describeError } from '@/shared/api/errors'
 import { useI18n } from '@/shared/i18n'
 import { useZk } from '@/shared/i18n/use-zk'
-import { telegram } from '@/shared/lib/telegram'
-import { Empty, PageHead, RowsSkeleton, Section, Seg, Skeleton, Tag, toast, usePageActions } from '@/shared/kit'
+import { Btn, Empty, PageHead, RowsSkeleton, Section, Seg, Skeleton, Tag, toast, usePageActions } from '@/shared/kit'
+import { L } from './i18n'
 
 type ModeValue = PurchaseMode | 'none'
 
@@ -27,12 +27,12 @@ export default function ProductPage() {
   const { productId } = useParams({ from: '/shell/catalog/products/$productId' })
   const navigate = useNavigate()
   const { t } = useI18n()
-  const { z, f } = useZk()
+  const { z, f, locale } = useZk()
+  const [showAll, setShowAll] = useState(false)
   const canEdit = useHasRole('buyer', 'admin')
   const { data: product, isPending, error } = useQuery(productQuery(productId))
   const { data: stores = [], isPending: storesPending } = useQuery(storesQuery)
 
-  useEffect(() => telegram.backButton(() => navigate({ to: '/catalog', search: { tab: 'products' } })), [navigate])
 
   usePageActions({
     secondary:
@@ -85,9 +85,19 @@ export default function ProductPage() {
       ) : stores.length === 0 ? (
         <div className="border-b border-line py-3 text-[14px] text-n7">{t.catalog.emptyStores}</div>
       ) : (
-        stores.map((store) => (
-          <CardRow key={store.id} product={product} store={store} card={cardByStore.get(store.id)} canEdit={canEdit} />
-        ))
+        <>
+          {/* Sozlangan omborlar — doim; qolganlari (o'nlab) — bosilganda */}
+          {stores
+            .filter((store) => showAll || cardByStore.has(store.id))
+            .map((store) => (
+              <CardRow key={store.id} product={product} store={store} card={cardByStore.get(store.id)} canEdit={canEdit} />
+            ))}
+          {!showAll && stores.length > cardByStore.size && (
+            <Btn block className="mt-3" onClick={() => setShowAll(true)}>
+              {L[locale].otherStores} · {stores.length - cardByStore.size}
+            </Btn>
+          )}
+        </>
       )}
     </div>
   )

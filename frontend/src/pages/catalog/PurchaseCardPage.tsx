@@ -1,7 +1,7 @@
 /** Xarid kartasi (tovar × ombor) — prototipda tovar ekranida Seg rejim; bu yerda to'liq sozlamalar. */
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useNavigate, useParams } from '@tanstack/react-router'
-import { useEffect, useState, type FormEvent } from 'react'
+import { useState, type FormEvent } from 'react'
 import {
   CATALOG_KEY,
   catalogApi,
@@ -14,7 +14,6 @@ import {
 import { describeError } from '@/shared/api/errors'
 import { useI18n } from '@/shared/i18n'
 import { useZk } from '@/shared/i18n/use-zk'
-import { telegram } from '@/shared/lib/telegram'
 import { Banner, Empty, Field, Input, PageHead, RowsSkeleton, Seg, toast, usePageActions } from '@/shared/kit'
 import { Select, SuffixInput } from './form-ui'
 
@@ -57,7 +56,6 @@ function CardForm({ product, storeId, storeName }: { product: ProductDetail; sto
   const supplierOptions = [{ value: '', label: c.none }, ...suppliers.map(([value, label]) => ({ value, label }))]
 
   const back = () => navigate({ to: '/catalog/products/$productId', params: { productId: product.id } })
-  useEffect(() => telegram.backButton(back))
 
   const save = useMutation({
     mutationFn: () => catalogApi.configureCard({ ...form, safety_stock: form.safety_stock || '0', seasonal_factor: form.seasonal_factor || '1' }),
