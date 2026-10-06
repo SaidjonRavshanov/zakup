@@ -1,0 +1,39 @@
+# Production: /srv/zakup. PostgreSQL — host'da (172.18.0.1), Nginx — host'da (127.0.0.1:8010 ga proxy).
+# Server 1 GB RAM — har servisga qattiq limit.
+name: zakup
+
+x-app: &app
+  build: ../backend
+  image: zakup-backend:latest
+  env_file: ./.env
+  restart: unless-stopped
+  extra_hosts:
+    - "pg.host:host-gateway"
+  volumes:
+    - /srv/zakup/media:/app/var/media
+  security_opt:
+    - no-new-privileges:true
+  cap_drop: [ALL]
+
+services:
+  api:
+    <<: *app
+    command: >-
+      uvicorn zakup.entrypoints.api:app --host 0.0.0.0 --port 8010
+      --proxy-headers --forwarded-allow-ips=*
+      --limit-max-requests 2000
+    ports:
+      - "127.0.0.1:8010:8010"
+    mem_limit: 320m
+    memswap_limit: 640m
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8010/api/v1/health', timeout=5)"]
+      interval: 30s
+      timeout: 6s
+      retries: 3
+
+  worker:
+    <<: *app
+    command: ["python", "-m", "zakup.entrypoints.worker"]
+    mem_limit: 256m
+    memswap_limit: 512m
