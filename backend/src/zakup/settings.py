@@ -82,6 +82,9 @@ class Settings(BaseSettings):
     auto_requests_hour: int | None = 6
     demand_window_days: int = 28  # o'rtacha kunlik sarf oynasi
     supplier_debt_policy: Literal["require_admin", "block", "off"] = "require_admin"
+    # Bot xabarlari: hodisalar bo'yicha xodimlarga; ertalab omborchiga bugungi yetkazmalar (Toshkent soati)
+    notifications_enabled: bool = True
+    deliveries_digest_hour: int | None = 7
 
     cors_origins: list[str] = ["http://localhost:5173", "http://127.0.0.1:5173"]
 

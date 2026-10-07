@@ -120,6 +120,21 @@ async def test_partial_payment_is_allocated_to_invoice(
     assert (await client.get("/api/v1/finance/suppliers", headers=accountant)).json() == []
     assert await _query(engine, "SELECT status, paid FROM finance.obligations") == [("PAID", Decimal("210000.00"))]
 
+    # Bot xabarlari (notifications): outbox → navbat. Muallif o'z amali haqida xabar olmaydi.
+    await worker.drain()
+    sent = await _query(
+        engine,
+        "SELECT chat_id, left(text, 1), path LIKE '/finance/payments/%' FROM notify.messages ORDER BY created_at",
+    )
+    # "Yangi xodim kutmoqda" — admin event qayta ishlanguncha faollashtirib bo'lgan: eskirgan xabar yuborilmaydi
+    assert not any(kind == "👤" for _, kind, _ in sent)
+    assert (8901, "✅", False) in sent  # ruxsat berildi → xodimning o'zi
+    assert (1001, "✅", False) not in sent  # bootstrap admin o'ziga "ruxsat berildi" olmaydi
+    assert sent.count((1001, "💳", True)) == 2  # ikkala zayavka tasdiqlashga → admin
+    assert sent.count((8901, "💰", True)) == 2  # tasdiqlandi → buxgalterga "to'lash kerak"
+    assert sent.count((8901, "✅", True)) == 2  # to'landi → muallif
+    assert not any(chat == 1001 and kind == "💰" for chat, kind, _ in sent)  # admin o'zi tasdiqlagan
+
 
 async def test_open_dispute_blocks_payment(
     client: AsyncClient, admin_headers: dict[str, str], worker: Worker, engine: AsyncEngine

@@ -87,7 +87,9 @@ def test_payment_request_lifecycle_allocates_to_invoices() -> None:
     payment.pay({first.id: first, second.id: second}, by=uuid4(), at=AT, proof_id=None)
     assert payment.status is PaymentStatus.PAID
     assert (first.status, second.outstanding) == (ObligationStatus.PAID, Decimal(300))
-    (event,) = payment.pull_events()
+    submitted, approved, event = payment.pull_events()
+    assert (submitted.event_type, submitted.status) == ("finance.payment_submitted", "SUBMITTED")
+    assert approved.event_type == "finance.payment_approved"
     assert isinstance(event, PaymentPaid)
     assert event.amount == "1200"
 

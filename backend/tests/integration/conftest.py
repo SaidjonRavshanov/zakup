@@ -103,7 +103,8 @@ async def _clean_tables() -> AsyncIterator[None]:
                 "TRUNCATE catalog.suppliers, catalog.stores, catalog.products, catalog.product_categories,"
                 " catalog.branches, platform.outbox, identity.users, iiko.links, iiko.sync_runs,"
                 " procurement.purchase_requests, procurement.purchase_orders, receiving.attachments,"
-                " iiko.invoice_exports, planning.stock_current, planning.consumption_daily, platform.daily_jobs CASCADE"
+                " iiko.invoice_exports, planning.stock_current, planning.consumption_daily, platform.daily_jobs,"
+                " notify.messages CASCADE"
             )
         )
         # Tizim foydalanuvchisi migratsiyada yaratiladi — TRUNCATE'dan keyin qaytariladi

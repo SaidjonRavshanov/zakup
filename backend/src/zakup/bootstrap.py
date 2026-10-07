@@ -113,6 +113,9 @@ from zakup.modules.integration_iiko.infrastructure.client import HttpIikoGateway
 from zakup.modules.integration_iiko.infrastructure.exports import BranchAdapter, ReceiptsAdapter, SqlExportQueue
 from zakup.modules.integration_iiko.infrastructure.planning_adapter import PlanningAdapter
 from zakup.modules.integration_iiko.infrastructure.repositories import SqlLinks, SqlSyncRunReader, SqlSyncRuns
+from zakup.modules.notifications.application.use_cases import DeliveriesDigest, NotifyOnEvent, SendNextMessage
+from zakup.modules.notifications.infrastructure.sql import SqlDirectory, SqlMessageQueue
+from zakup.modules.notifications.infrastructure.telegram import TelegramSender
 from zakup.modules.planning.application.facade import DemandQueries, PlanningIngest
 from zakup.modules.planning.infrastructure.repositories import SqlPlanningStore
 from zakup.modules.procurement.api.router import public_router as procurement_public_router
@@ -179,8 +182,9 @@ from zakup.platform.di import Stub
 from zakup.platform.health import router as health_router
 from zakup.platform.scheduler import DailyJob, DailyScheduler
 from zakup.platform.uow import SqlAlchemyUnitOfWork
-from zakup.settings import Settings
+from zakup.settings import Settings, get_settings
 from zakup.shared_kernel.auth import Principal, Role
+from zakup.shared_kernel.clock import utc_now
 
 ROUTERS: tuple[APIRouter, ...] = (
     health_router,
@@ -548,8 +552,12 @@ def _receipts_port(session: AsyncSession) -> ReceiptsAdapter:
     return ReceiptsAdapter(ReceiptExports(SqlExportStore(session)))
 
 
-def outbox_handlers() -> dict[str, Callable[[AsyncSession, dict[str, Any]], Any]]:
-    """Event → modul reaksiyasi (ARCHITECTURE §3.1.2): receiving ular haqida hech narsa bilmaydi."""
+def outbox_handlers(settings: Settings | None = None) -> dict[str, Callable[[AsyncSession, dict[str, Any]], Any]]:
+    """Event → modul reaksiyasi (ARCHITECTURE §3.1.2): receiving ular haqida hech narsa bilmaydi.
+
+    Bot xabarlari (notifications) — har eventga qo'shimcha reaksiya: navbatga yoziladi, worker yuboradi.
+    """
+    settings = settings or get_settings()
 
     async def register_obligation(session: AsyncSession, payload: dict[str, Any], *, blocked: bool) -> None:
         register = RegisterObligation(SqlObligationRepository(session), SuppliersAdapter(catalog_queries(session)))
@@ -571,7 +579,47 @@ def outbox_handlers() -> dict[str, Callable[[AsyncSession, dict[str, Any]], Any]
     async def receipt_disputed(session: AsyncSession, payload: dict[str, Any]) -> None:
         await register_obligation(session, payload, blocked=True)
 
-    return {"receiving.receipt_accepted": receipt_accepted, "receiving.receipt_disputed": receipt_disputed}
+    handlers: dict[str, Callable[[AsyncSession, dict[str, Any]], Any]] = {
+        "receiving.receipt_accepted": receipt_accepted,
+        "receiving.receipt_disputed": receipt_disputed,
+    }
+    if not settings.notifications_enabled:
+        return handlers
+
+    def notifier(session: AsyncSession) -> NotifyOnEvent:
+        return NotifyOnEvent(SqlDirectory(session), SqlMessageQueue(session), settings.approval_limits)
+
+    def with_notification(event_type: str, first: Callable[[AsyncSession, dict[str, Any]], Any] | None) -> Any:
+        async def handle(session: AsyncSession, payload: dict[str, Any]) -> None:
+            if first is not None:
+                await first(session, payload)
+            await notifier(session)(event_type, payload)
+
+        return handle
+
+    for event_type in NotifyOnEvent.RULES:
+        handlers[event_type] = with_notification(event_type, handlers.get(event_type))
+    return handlers
+
+
+def build_notification_sender(
+    settings: Settings, session_factory: async_sessionmaker[AsyncSession]
+) -> Callable[[], Any]:
+    """Worker: navbatdan bitta xabar → Telegram. Token yo'q yoki o'chiq bo'lsa — hech narsa qilmaydi."""
+    token = settings.telegram_bot_token.get_secret_value()
+    if not settings.notifications_enabled or not token:
+
+        async def idle() -> bool:
+            return False
+
+        return idle
+    sender = TelegramSender(token)
+
+    async def send_next() -> bool:
+        async with session_factory() as session:
+            return await SendNextMessage(SqlMessageQueue(session), sender, settings.public_base_url, session.commit)()
+
+    return send_next
 
 
 def build_invoice_exporter(
@@ -609,10 +657,17 @@ def build_daily_scheduler(
         async with session_factory() as session:
             await auto_requests(session, settings)(None)
 
+    async def deliveries_digest() -> None:
+        async with session_factory() as session:
+            await DeliveriesDigest(SqlDirectory(session), SqlMessageQueue(session), utc_now)()
+            await session.commit()
+
+    digest_hour = settings.deliveries_digest_hour if settings.notifications_enabled else None
     return DailyScheduler(
         session_factory,
         [
             DailyJob("iiko_daily_sync", settings.daily_sync_hour, daily_syncs),
             DailyJob("auto_requests", settings.auto_requests_hour, auto),
+            DailyJob("deliveries_digest", digest_hour, deliveries_digest),
         ],
     )

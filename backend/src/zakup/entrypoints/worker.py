@@ -1,7 +1,7 @@
 """Fon ishlari: `python -m zakup.entrypoints.worker`.
 
 Har aylanishda: kunlik ishlar (ertalab iiko sinxroni, avto-zayavka), outbox relay (eventlar → modul reaksiyalari),
-iiko sinxronizatsiya navbati, qabul → iiko kirimi.
+bot xabarlari (bittadan), iiko sinxronizatsiya navbati, qabul → iiko kirimi.
 iiko bilan faqat shu process gaplashadi (ADR-05); bir nechta worker bo'lsa ham serverga bitta sessiya — advisory lock.
 """
 
@@ -15,6 +15,7 @@ from zakup.bootstrap import (
     build_daily_scheduler,
     build_iiko_gateway,
     build_invoice_exporter,
+    build_notification_sender,
     iiko_scope_factory,
     outbox_handlers,
 )
@@ -34,7 +35,8 @@ async def main() -> None:
     engine = create_engine(settings)
     sessions = create_session_factory(engine)
     gateway = build_iiko_gateway(settings, engine)
-    relay = OutboxRelay(sessions, outbox_handlers())
+    relay = OutboxRelay(sessions, outbox_handlers(settings))
+    send_next = build_notification_sender(settings, sessions)
     run_next = RunNextSync(gateway, iiko_scope_factory(sessions))
     export_next = build_invoice_exporter(settings, gateway, sessions)
     daily = build_daily_scheduler(settings, gateway, sessions)
@@ -47,7 +49,7 @@ async def main() -> None:
     log.info("worker_started", iiko_servers=[s.code for s in settings.iiko_servers])
     try:
         while not stop.is_set():
-            busy = await daily() | bool(await relay()) | await run_next() | await export_next()
+            busy = await daily() | bool(await relay()) | await send_next() | await run_next() | await export_next()
             if not busy:
                 with contextlib.suppress(TimeoutError):
                     await asyncio.wait_for(stop.wait(), POLL_INTERVAL_S)

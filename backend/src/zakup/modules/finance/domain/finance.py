@@ -128,6 +128,35 @@ class PaymentPaid(DomainEvent):
     method: str
 
 
+@dataclass(frozen=True, kw_only=True)
+class PaymentSubmitted(DomainEvent):
+    """To'lov zayavkasi yaratildi → bot: tasdiqlovchiga (yoki tasdiq shart bo'lmasa — buxgalterga)."""
+
+    event_type: ClassVar[str] = "finance.payment_submitted"
+    supplier_id: str
+    amount: str
+    method: str
+    status: str
+
+
+@dataclass(frozen=True, kw_only=True)
+class PaymentApproved(DomainEvent):
+    """Tasdiqlandi → bot: buxgalterga "to'lash kerak"."""
+
+    event_type: ClassVar[str] = "finance.payment_approved"
+    supplier_id: str
+    amount: str
+
+
+@dataclass(frozen=True, kw_only=True)
+class PaymentRejected(DomainEvent):
+    """Rad etildi → bot: zayavka muallifiga."""
+
+    event_type: ClassVar[str] = "finance.payment_rejected"
+    requested_by: str
+    comment: str
+
+
 @dataclass(frozen=True, slots=True)
 class PaymentLine:
     obligation_id: UUID
@@ -188,6 +217,15 @@ class PaymentRequest(AggregateRoot):
         )
         if not approval_required:
             request.approved_by, request.approved_at = requested_by, at
+        request.record(
+            PaymentSubmitted(
+                aggregate_id=id,
+                supplier_id=str(supplier_id),
+                amount=str(request.total),
+                method=method.value,
+                status=request.status.value,
+            )
+        )
         return request
 
     def __post_init__(self) -> None:
@@ -205,6 +243,7 @@ class PaymentRequest(AggregateRoot):
         self._require(PaymentStatus.SUBMITTED)
         self.status = PaymentStatus.APPROVED
         self.approved_by, self.approved_at = by, at
+        self.record(PaymentApproved(aggregate_id=self.id, supplier_id=str(self.supplier_id), amount=str(self.total)))
 
     def reject(self, *, by: UUID, comment: str, at: datetime) -> None:
         self._require(PaymentStatus.SUBMITTED, PaymentStatus.APPROVED)
@@ -213,6 +252,7 @@ class PaymentRequest(AggregateRoot):
             raise InvalidPaymentError("payment.comment_required")
         self.status = PaymentStatus.REJECTED
         self.approved_by, self.approved_at, self.decision_comment = by, at, text
+        self.record(PaymentRejected(aggregate_id=self.id, requested_by=str(self.requested_by), comment=text))
 
     def cancel(self) -> None:
         self._require(PaymentStatus.SUBMITTED, PaymentStatus.APPROVED)

@@ -56,6 +56,8 @@ known-first-party = ["zakup", "tests"]
 "src/zakup/modules/integration_iiko/domain/mapping.py" = ["RUF001"]
 # Yetkazuvchiga ruscha xabar shabloni
 "src/zakup/modules/procurement/application/message.py" = ["RUF001"]
+# Bot xabarlari shablonlari (ruscha)
+"src/zakup/modules/notifications/domain/messages.py" = ["RUF001"]
 "tests/**" = ["PLR2004", "S105", "S106", "RUF001", "RUF003"]
 "alembic/**" = ["N999"]
 # Hisobot SQL'i faqat ichki konstantalardan yig'iladi; foydalanuvchi qiymatlari — bind parametrlar
@@ -99,6 +101,7 @@ containers = [
     "zakup.modules.finance",
     "zakup.modules.identity",
     "zakup.modules.integration_iiko",
+    "zakup.modules.notifications",
     "zakup.modules.planning",
     "zakup.modules.procurement",
     "zakup.modules.receiving",
@@ -182,6 +185,21 @@ name = "analytics - read-model: boshqa modullar kodini import qilmaydi (faqat SQ
 type = "forbidden"
 source_modules = ["zakup.modules.analytics"]
 forbidden_modules = [
+    "zakup.modules.catalog",
+    "zakup.modules.finance",
+    "zakup.modules.identity",
+    "zakup.modules.integration_iiko",
+    "zakup.modules.planning",
+    "zakup.modules.procurement",
+    "zakup.modules.receiving",
+]
+
+[[tool.importlinter.contracts]]
+name = "notifications - boshqa modullar kodini import qilmaydi (eventlar payload'i + read-only SQL)"
+type = "forbidden"
+source_modules = ["zakup.modules.notifications"]
+forbidden_modules = [
+    "zakup.modules.analytics",
     "zakup.modules.catalog",
     "zakup.modules.finance",
     "zakup.modules.identity",
