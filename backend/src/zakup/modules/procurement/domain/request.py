@@ -9,7 +9,7 @@ Miqdor — tovarning bazaviy birligida (oshpaz kg / dona bilan o'ylaydi); qadoqq
 
 from dataclasses import dataclass
 from datetime import date, datetime
-from decimal import ROUND_HALF_UP, Decimal
+from decimal import ROUND_CEILING, ROUND_HALF_UP, Decimal
 from enum import StrEnum
 from typing import ClassVar, Self
 from uuid import UUID
@@ -54,11 +54,27 @@ class InvalidRequestError(DomainError):
 
 @dataclass(frozen=True, slots=True)
 class OfferChoice:
-    """Tanlangan yetkazuvchi taklifi: kutilgan narx — bazaviy birlik uchun (taklif narxi / qadoqdagi miqdor)."""
+    """Tanlangan yetkazuvchi taklifi. Summa buyurtmadagidek: qadoqqa (va karralilikka) yuqoriga yaxlitlangan.
+
+    `price_per_pack` yo'q (eski qatorlar) — bazaviy narx * miqdor.
+    """
 
     offer_id: UUID
     supplier_id: UUID
     price_per_base: Decimal
+    pack_unit: str | None = None
+    pack_factor: Decimal = Decimal(1)
+    pack_multiple: Decimal = Decimal(1)
+    price_per_pack: Decimal | None = None
+
+    def packs(self, qty: Decimal) -> Decimal | None:
+        """Bazaviy miqdor → qadoqlar (catalog Offer.order_quantity bilan bir xil formula)."""
+        if self.price_per_pack is None or self.pack_factor <= 0 or self.pack_multiple <= 0:
+            return None
+        if qty <= 0:
+            return Decimal(0)
+        steps = (qty / self.pack_factor / self.pack_multiple).to_integral_value(ROUND_CEILING)
+        return steps * self.pack_multiple
 
 
 @dataclass(frozen=True, slots=True)
@@ -83,6 +99,9 @@ class RequestLine:
     def expected_amount(self) -> Decimal:
         if self.offer is None:
             return Decimal(0)
+        packs = self.offer.packs(self.qty)
+        if packs is not None and self.offer.price_per_pack is not None:
+            return (packs * self.offer.price_per_pack).quantize(MONEY_EXP, ROUND_HALF_UP)
         return (self.qty * self.offer.price_per_base).quantize(MONEY_EXP, ROUND_HALF_UP)
 
 

@@ -78,11 +78,13 @@ async def test_full_flow_request_to_supplier_response(client: AsyncClient, world
 
     detail = (await client.get(f"{API}/requests/{request_id}", headers=w.chef)).json()
     assert detail["status"] == "PENDING_APPROVAL"
-    # Avtomatik eng arzon yetkazuvchi: un — Don (10 000/kg), shakar — Don (16 000/kg)
+    # Avtomatik eng arzon yetkazuvchi: un — Don (10 000/kg), shakar — Don (16 000/kg).
+    # Summa buyurtmadagidek qadoqqa yaxlitlangan: 30 kg un → 2 qop, 10 kg shakar → 1 qop
     assert [(ln["product_name"], ln["supplier_name"], ln["amount"]) for ln in detail["lines"]] == [
-        ("Un", "Don Mahsulot", "300000.00"),
-        ("Shakar", "Don Mahsulot", "160000.00"),
+        ("Un", "Don Mahsulot", "500000.00"),
+        ("Shakar", "Don Mahsulot", "400000.00"),
     ]
+    assert detail["total"] == "900000.00"
     # Buyurtmaga qanday ketadi: qadoqqa yaxlitlangan — PO summasi bilan bir xil (pastda 900 000)
     assert [(ln["pack_unit"], ln["qty_packs"], ln["order_amount"]) for ln in detail["lines"]] == [
         ("bag", "2.0000", "500000.00"),

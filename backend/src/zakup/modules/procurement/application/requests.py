@@ -3,10 +3,10 @@
 from collections import defaultdict
 from dataclasses import replace
 from datetime import date
-from decimal import ROUND_HALF_UP, Decimal
+from decimal import Decimal
 from uuid import UUID
 
-from zakup.modules.procurement.application.dto import OfferInfo, RequestDetail, RequestLineView, RequestListItem
+from zakup.modules.procurement.application.dto import OfferInfo, RequestDetail, RequestListItem
 from zakup.modules.procurement.application.ports import (
     CatalogPort,
     OrderReader,
@@ -37,8 +37,20 @@ DECIDERS = (Role.BUYER, Role.APPROVER, Role.ADMIN)
 OVERSEERS = (Role.BUYER, Role.APPROVER, Role.ADMIN, Role.AUDITOR, Role.ACCOUNTANT)
 
 
-def _choice(offer: OfferInfo) -> OfferChoice:
-    return OfferChoice(offer_id=offer.offer_id, supplier_id=offer.supplier_id, price_per_base=offer.price_per_base)
+def offer_choice(offer: OfferInfo) -> OfferChoice:
+    """Katalog taklifi → zayavka qatoridagi tanlov (qadoq ma'lumoti bilan — summa buyurtmadagidek)."""
+    return OfferChoice(
+        offer_id=offer.offer_id,
+        supplier_id=offer.supplier_id,
+        price_per_base=offer.price_per_base,
+        pack_unit=offer.pack_unit,
+        pack_factor=offer.pack_factor,
+        pack_multiple=offer.order_multiple,
+        price_per_pack=offer.price_per_pack,
+    )
+
+
+_choice = offer_choice
 
 
 async def _load(requests: RequestRepository, request_id: UUID) -> PurchaseRequest:
@@ -376,7 +388,7 @@ class GetRequest:
         lines = tuple(
             [
                 replace(
-                    await self._packed(line),
+                    line,
                     product_name=labels.product(line.product_id)[0],
                     base_unit=labels.product(line.product_id)[1],
                     supplier_name=labels.suppliers.get(line.supplier_id) if line.supplier_id else None,
@@ -399,22 +411,6 @@ class GetRequest:
                 )
                 for order in orders
             ),
-        )
-
-    async def _packed(self, line: RequestLineView) -> RequestLineView:
-        """Qator → buyurtmadagi qadoqlar va summa (ApproveRequest._split bilan bir xil hisob)."""
-        if line.offer_id is None:
-            return line
-        offer = await self._catalog.offer(line.offer_id)
-        packs = await self._catalog.pack_quantity(line.offer_id, line.qty)
-        if offer is None or packs is None:
-            return line
-        return replace(
-            line,
-            pack_unit=offer.pack_unit,
-            pack_factor=offer.pack_factor,
-            qty_packs=packs,
-            order_amount=(packs * offer.price_per_pack).quantize(Decimal("0.01"), ROUND_HALF_UP),
         )
 
 

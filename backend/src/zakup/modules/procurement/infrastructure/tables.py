@@ -85,6 +85,11 @@ purchase_request_lines = Table(
     Column("offer_id", UUID(as_uuid=True), ForeignKey("catalog.supplier_products.id")),
     Column("supplier_id", UUID(as_uuid=True), ForeignKey("catalog.suppliers.id")),
     Column("price_per_base", Numeric(18, 4)),
+    # Taklif qadog'i (tanlangan paytdagi): summa buyurtmadagidek qadoqqa yaxlitlanadi
+    Column("pack_unit", Text),
+    Column("pack_factor", Numeric(18, 4)),
+    Column("pack_multiple", Numeric(18, 4)),
+    Column("price_per_pack", Numeric(18, 4)),
     Column("decision", Text, nullable=False, server_default="pending"),
     # Avto-zayavka: hisoblangan miqdor va "nega shuncha" (WORKFLOW B3)
     Column("qty_suggested", Numeric(18, 4)),

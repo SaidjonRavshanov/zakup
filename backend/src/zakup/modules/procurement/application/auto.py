@@ -16,7 +16,8 @@ import structlog
 from zakup.modules.planning.application.facade import DemandInputs, DemandResult, calculate
 from zakup.modules.procurement.application.dto import AutoCardInfo, DemandSnapshot, OfferInfo, SupplierInfo
 from zakup.modules.procurement.application.ports import CatalogPort, DemandPort, OrderRepository, RequestRepository
-from zakup.modules.procurement.domain.request import OfferChoice, PurchaseRequest, Suggestion
+from zakup.modules.procurement.application.requests import offer_choice
+from zakup.modules.procurement.domain.request import PurchaseRequest, Suggestion
 from zakup.shared_kernel.auth import SYSTEM_USER_ID, Principal, Role
 from zakup.shared_kernel.clock import Clock, business_today, utc_now
 from zakup.shared_kernel.uow import UnitOfWork
@@ -99,7 +100,7 @@ class GenerateAutoRequests:
                         request.add_auto_line(
                             product_id=p.product_id,
                             qty=p.qty,
-                            offer=OfferChoice(p.offer.offer_id, p.offer.supplier_id, p.offer.price_per_base),
+                            offer=offer_choice(p.offer),
                             suggestion=p.suggestion,
                         )
                     request.mark_drafted()

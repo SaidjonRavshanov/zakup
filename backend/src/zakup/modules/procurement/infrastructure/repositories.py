@@ -108,12 +108,31 @@ def _request_lines(request: PurchaseRequest) -> list[dict[str, Any]]:
             "offer_id": line.offer.offer_id if line.offer else None,
             "supplier_id": line.offer.supplier_id if line.offer else None,
             "price_per_base": line.offer.price_per_base if line.offer else None,
+            "pack_unit": line.offer.pack_unit if line.offer else None,
+            "pack_factor": line.offer.pack_factor if line.offer and line.offer.price_per_pack is not None else None,
+            "pack_multiple": line.offer.pack_multiple if line.offer and line.offer.price_per_pack is not None else None,
+            "price_per_pack": line.offer.price_per_pack if line.offer else None,
             "decision": line.decision.value,
             "qty_suggested": line.suggestion.qty if line.suggestion else None,
             "calc": line.suggestion.calc if line.suggestion else None,
         }
         for position, line in enumerate(request.lines)
     ]
+
+
+def _offer(line: Any) -> OfferChoice:
+    """Saqlangan tanlov; qadoq ma'lumoti yo'q eski qatorlar — bazaviy narx bo'yicha."""
+    if line.price_per_pack is None:
+        return OfferChoice(line.offer_id, line.supplier_id, line.price_per_base)
+    return OfferChoice(
+        offer_id=line.offer_id,
+        supplier_id=line.supplier_id,
+        price_per_base=line.price_per_base,
+        pack_unit=line.pack_unit,
+        pack_factor=line.pack_factor,
+        pack_multiple=line.pack_multiple,
+        price_per_pack=line.price_per_pack,
+    )
 
 
 class SqlRequestRepository:
@@ -174,7 +193,7 @@ class SqlRequestRepository:
                     product_id=line.product_id,
                     qty=line.qty,
                     note=line.note,
-                    offer=OfferChoice(line.offer_id, line.supplier_id, line.price_per_base) if line.offer_id else None,
+                    offer=_offer(line) if line.offer_id else None,
                     decision=LineDecision(line.decision),
                     suggestion=Suggestion(line.qty_suggested, line.calc or {})
                     if line.qty_suggested is not None

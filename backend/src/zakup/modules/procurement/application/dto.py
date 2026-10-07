@@ -21,6 +21,7 @@ class OfferInfo:
     price_per_base: Decimal
     supplier_sku: str | None
     available: bool
+    order_multiple: Decimal = Decimal(1)
 
 
 @dataclass(frozen=True, slots=True)

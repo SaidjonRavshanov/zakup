@@ -19,6 +19,7 @@ def _offer(quote: OfferQuote) -> OfferInfo:
         price_per_base=quote.price_per_base,
         supplier_sku=quote.supplier_sku,
         available=quote.available,
+        order_multiple=quote.order_multiple,
     )
 
 

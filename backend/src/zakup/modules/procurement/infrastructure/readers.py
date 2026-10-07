@@ -19,7 +19,8 @@ from zakup.modules.procurement.application.dto import (
 )
 from zakup.modules.procurement.domain.approval import Decision
 from zakup.modules.procurement.domain.order import Channel, OrderStatus, ResponseKind
-from zakup.modules.procurement.domain.request import LineDecision, RequestStatus, RequestType
+from zakup.modules.procurement.domain.request import LineDecision, RequestLine, RequestStatus, RequestType
+from zakup.modules.procurement.infrastructure.repositories import _offer
 from zakup.modules.procurement.infrastructure.tables import (
     approvals,
     purchase_order_lines,
@@ -93,24 +94,7 @@ class SqlRequestReader:
             total=row.total_amount,
             created_at=row.created_at,
             version=row.version,
-            lines=tuple(
-                RequestLineView(
-                    id=line.id,
-                    product_id=line.product_id,
-                    qty=line.qty,
-                    note=line.note,
-                    offer_id=line.offer_id,
-                    supplier_id=line.supplier_id,
-                    price_per_base=line.price_per_base,
-                    amount=(line.qty * line.price_per_base).quantize(MONEY, ROUND_HALF_UP)
-                    if line.price_per_base is not None
-                    else Decimal(0),
-                    decision=LineDecision(line.decision),
-                    qty_suggested=line.qty_suggested,
-                    calc=line.calc,
-                )
-                for line in lines
-            ),
+            lines=tuple(_line_view(line) for line in lines),
             approvals=tuple(
                 ApprovalView(
                     approver_id=r.approver_id,
@@ -123,6 +107,34 @@ class SqlRequestReader:
                 for r in records
             ),
         )
+
+
+def _line_view(line: Any) -> RequestLineView:
+    """Summa — domendagi hisob bilan bir xil (qadoqqa yaxlitlangan, buyurtmadagidek)."""
+    choice = _offer(line) if line.offer_id is not None else None
+    packs = choice.packs(line.qty) if choice is not None else None
+    amount = (
+        RequestLine(id=line.id, product_id=line.product_id, qty=line.qty, offer=choice).expected_amount
+        if choice is not None
+        else Decimal(0)
+    )
+    return RequestLineView(
+        id=line.id,
+        product_id=line.product_id,
+        qty=line.qty,
+        note=line.note,
+        offer_id=line.offer_id,
+        supplier_id=line.supplier_id,
+        price_per_base=line.price_per_base,
+        amount=amount,
+        decision=LineDecision(line.decision),
+        qty_suggested=line.qty_suggested,
+        calc=line.calc,
+        pack_unit=line.pack_unit,
+        pack_factor=line.pack_factor,
+        qty_packs=packs,
+        order_amount=amount if packs is not None else None,
+    )
 
 
 def _order_item(row: Row[Any]) -> OrderListItem:
