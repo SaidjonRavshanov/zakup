@@ -136,6 +136,14 @@ class OrderResponded(DomainEvent):
     status: str
 
 
+@dataclass(frozen=True, kw_only=True)
+class OrderChangesApproved(DomainEvent):
+    """Yetkazuvchi o'zgarishlari (narx / miqdor) qayta tasdiqlandi → bot: buyurtmani yuborgan zakupshikka."""
+
+    event_type: ClassVar[str] = "procurement.order_changes_approved"
+    status: str
+
+
 class PurchaseOrder(AggregateRoot):
     aggregate_type: ClassVar[str] = "procurement.purchase_order"
 
@@ -248,6 +256,7 @@ class PurchaseOrder(AggregateRoot):
         for line in self.lines:
             line.needs_reapproval = False
         self.status = self._status_after_response()
+        self.record(OrderChangesApproved(aggregate_id=self.id, status=self.status.value))
 
     def mark_received(self, *, complete: bool) -> None:
         """Qabul yakunlandi (receiving moduli chaqiradi). Bitta buyurtma — bitta qabul (MVP)."""
@@ -273,7 +282,14 @@ class PurchaseOrder(AggregateRoot):
         return result
 
     def cancel(self, *, reason: str) -> None:
-        self._require(OrderStatus.CREATED, OrderStatus.SENT, OrderStatus.REAPPROVAL)
+        """Qabulgacha bekor qilinadi (tasdiqlangan, lekin kelmagan buyurtma ham — aks holda "yo'lda" qolib ketadi)."""
+        self._require(
+            OrderStatus.CREATED,
+            OrderStatus.SENT,
+            OrderStatus.REAPPROVAL,
+            OrderStatus.CONFIRMED,
+            OrderStatus.PARTIALLY_CONFIRMED,
+        )
         cleaned = " ".join(reason.split())[:500]
         if not cleaned:
             raise InvalidOrderError("order.reason_required")
@@ -309,6 +325,8 @@ def _apply(line: OrderLine, response: LineResponse, tolerance: Tolerance) -> Non
             if response.qty_packs is None or response.qty_packs < 0:
                 raise InvalidOrderError("order.qty_required")
             line.qty_confirmed = response.qty_packs
+            # Ko'paytirish — tasdiqlanmagan xarid (va ochiq havoladan): faqat qayta tasdiqlash orqali
+            line.needs_reapproval = response.qty_packs > line.qty_packs
         case ResponseKind.PRICE_CHANGED:
             if response.price_per_pack is None or response.price_per_pack < 0:
                 raise InvalidOrderError("order.price_required")

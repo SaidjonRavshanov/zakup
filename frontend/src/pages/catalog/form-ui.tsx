@@ -1,7 +1,7 @@
 /** Katalog formalari uchun kichik yordamchilar (kit'da hali yo'q): native select va o'ng tomonda birlikli input. */
 import { ChevronDown } from 'lucide-react'
 import type { InputHTMLAttributes, ReactNode, SelectHTMLAttributes } from 'react'
-import { Input } from '@/shared/kit'
+import { Input, labellable } from '@/shared/kit'
 import { cn } from '@/shared/lib/cn'
 
 export function Select({
@@ -32,6 +32,10 @@ export function SuffixInput({ suffix, className, ...rest }: InputHTMLAttributes<
     </div>
   )
 }
+
+// Field yorlig'i ichki <select> / <input> bilan bog'lanadi
+labellable(Select)
+labellable(SuffixInput)
 
 /** Forma bo'limi nomi (13px). */
 export function FormSection({ children }: { children: ReactNode }) {

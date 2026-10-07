@@ -76,6 +76,9 @@ class SubmitReceiptIn(BaseModel):
     payment_method: PaymentMethod | None = None
     comment: str | None = Field(default=None, max_length=500)
     lines: list[FactLineIn] = Field(max_length=300)
+    captured_at: datetime | None = Field(
+        default=None, description="Oflayn: qabul telefonda qachon rasmiylashtirilgan (yuborilgan vaqt emas)"
+    )
 
 
 class StatusOut(BaseModel):
@@ -204,6 +207,7 @@ async def submit_receipt(
         payment_method=body.payment_method,
         comment=body.comment,
         lines=tuple(FactLineData(**line.model_dump()) for line in body.lines),
+        captured_at=body.captured_at,
     )
     return StatusOut(status=await use_case(actor, command))
 

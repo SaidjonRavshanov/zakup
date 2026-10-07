@@ -358,6 +358,14 @@ MESSAGES: Final[dict[str, dict[Locale, str]]] = {
         "uz": "Rollar soni {max} tadan oshmasligi kerak",
         "ru": "Ролей не может быть больше {max}",
     },
+    "offer.price_future": {
+        "uz": "Narx kelajakdagi sanadan kiritilmaydi — sana bugun yoki o'tgan kun bo'lsin",
+        "ru": "Нельзя ввести цену с будущей даты — укажите сегодня или прошедший день",
+    },
+    "user.admin_must_be_global": {
+        "uz": "Admin roli faqat barcha omborlarga beriladi",
+        "ru": "Роль админа выдаётся только на все склады",
+    },
     "user.unknown_store": {"uz": "Bunday ombor yo'q", "ru": "Такого склада нет"},
     "user.not_found": {"uz": "Foydalanuvchi topilmadi", "ru": "Пользователь не найден"},
     "user.modified": {

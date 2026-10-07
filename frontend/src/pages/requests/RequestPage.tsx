@@ -17,7 +17,7 @@ import { meQuery, useHasRole } from '@/entities/user'
 import { ApiError } from '@/shared/api/client'
 import { describeError } from '@/shared/api/errors'
 import { useI18n } from '@/shared/i18n'
-import { fill, useZk, type ZkKey } from '@/shared/i18n/use-zk'
+import { fill, todayIso, useZk, type ZkKey } from '@/shared/i18n/use-zk'
 import {
   Banner,
   Btn,
@@ -28,6 +28,7 @@ import {
   PageHead,
   RowsSkeleton,
   Section,
+  Seg,
   Sheet,
   Stepper,
   Tag,
@@ -38,6 +39,7 @@ import {
   usePageActions,
 } from '@/shared/kit'
 import { AddProductSheet, type PickedProduct } from './AddProductSheet'
+import { L } from './i18n'
 import { packInfo, parseQty, qtyBody, qtyStep, typeLabel } from './labels'
 
 export default function RequestPage() {
@@ -64,7 +66,7 @@ interface Run {
 }
 
 function RequestView({ request }: { request: RequestDetail }) {
-  const { z, f } = useZk()
+  const { z, f, locale } = useZk()
   const { t } = useI18n()
   const navigate = useNavigate()
   const queryClient = useQueryClient()
@@ -108,6 +110,21 @@ function RequestView({ request }: { request: RequestDetail }) {
       await refresh()
     },
   })
+
+  // Qoralama sanasini o'zgartirish (comment o'zgarmaydi — backend ikkalasini birga oladi)
+  const revise = useMutation({
+    mutationFn: (neededBy: string) => requestsApi.revise(request.id, { needed_by: neededBy, comment: request.comment }),
+    onSuccess: async () => {
+      toast(z.toast_saved)
+      await refresh()
+    },
+  })
+  const neededPast = request.needed_by < todayIso()
+  const needOptions = [
+    { value: todayIso(), label: z.today_l },
+    { value: todayIso(1), label: z.tomorrow_l },
+    { value: todayIso(2), label: f.dt(todayIso(2)) },
+  ]
 
   const selected = request.lines.filter((l) => !deselected.has(l.id))
   const partial = selected.length < request.lines.length
@@ -218,6 +235,22 @@ function RequestView({ request }: { request: RequestDetail }) {
           { label: z.total, value: f.money(request.order_total ?? request.total) },
         ]}
       />
+      {canEdit && (
+        <>
+          <div className="mb-2 mt-4 text-[13px] font-medium text-n7">{z.need_to}</div>
+          <Seg
+            options={needOptions}
+            value={request.needed_by}
+            onChange={(date) => date !== request.needed_by && !revise.isPending && revise.mutate(date)}
+          />
+          {neededPast && <Banner tone="warn">{L[locale].needed_past}</Banner>}
+          {revise.error && (
+            <Banner tone="danger" onClose={() => revise.reset()}>
+              {describeError(revise.error, t)}
+            </Banner>
+          )}
+        </>
+      )}
       {request.type === 'auto' && <div className="mt-2.5 text-[14px] text-n7">{`${z.author}: ${z.autoreq}`}</div>}
       {request.comment && <div className="mt-1.5 border-l-2 border-line pl-2.5 text-[15px]">{request.comment}</div>}
 
@@ -439,7 +472,8 @@ function LineSheet({
   const { z, f } = useZk()
   const { t } = useI18n()
   const { data: product } = useQuery(productQuery(line.product_id))
-  const [qty, setQty] = useState(f.n(Number(line.qty)).replace(/\s/g, ''))
+  // Aniq qiymat (4 kasrgacha, yaxlitlanmaydi) — tahrirsiz "o'zgardi" bo'lib qolmasin
+  const [qty, setQty] = useState(String(Number(line.qty)).replace('.', ','))
   const offers = (product?.offers ?? []).filter((o) => !o.archived)
   const current = offers.find((o) => o.id === line.offer_id) ?? null
   const save = useMutation({
@@ -450,7 +484,7 @@ function LineSheet({
   const packed = current && !(Number(current.pack_factor) === 1 && current.pack_unit === line.base_unit)
   const step = packed ? Number(current.pack_factor) : qtyStep(line.base_unit)
   const pk = current && value > 0 ? packInfo(value, current, f, line.base_unit) : null
-  const dirty = value > 0 && value !== Number(line.qty)
+  const dirty = value > 0 && qtyBody(qty) !== String(Number(line.qty))
 
   const packText = pk?.label ? `= ${pk.label} · ${f.money(pk.sum)}` : ''
 
@@ -493,6 +527,7 @@ function LineSheet({
       {editable && (
         <>
           <div className="mb-2 mt-5 text-[13px] font-medium text-n7">{packed ? z.qty_packs : `${z.qty} · ${f.unit(line.base_unit)}`}</div>
+          {/* min — bitta qadoq; undan kichik qiymat "−" bilan yuqoriga sakramaydi (Stepper) */}
           <Stepper size={56} value={qty} onChange={setQty} step={step} min={step} unit={f.unit(line.base_unit)} label={z.qty} />
           {packText && <div className="mt-2 text-[14px] text-n7">{packText}</div>}
           {dirty && (

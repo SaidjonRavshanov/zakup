@@ -304,6 +304,15 @@ class PurchaseRequest(AggregateRoot):
         self._require(RequestStatus.APPROVED, RequestStatus.PARTIALLY_APPROVED)
         self.status = RequestStatus.SPLIT
 
+    def reprice(self, choices: dict[UUID, OfferChoice]) -> None:
+        """Tasdiqlashdan oldin narx/qadoqni katalogdagi joriy holatga yangilash: limit buyurtma summasiga
+        (PO'lar shu narx bilan yaratiladi) qarab tekshirilsin."""
+        self._require(RequestStatus.PENDING_APPROVAL)
+        for line in self.lines:
+            choice = choices.get(line.id)
+            if choice is not None and line.offer is not None and choice.offer_id == line.offer.offer_id:
+                line.offer = choice
+
     # ------------------------------------------------------------ hisob
 
     @property

@@ -118,7 +118,9 @@ class GenerateAutoRequests:
         products = [card.product_id for card in cards]
         busy = await self._requests.open_products(store)
         stats = await self._demand.stats(store, products, today=today)
-        transit = await self._orders.in_transit(store, products)
+        # Eng eski qoldiq snapshot'i: undan keyin qabul qilingan tovar ham "yo'lda" hisoblanadi
+        taken = [s.stock_at for s in stats.values() if s.stock_at is not None]
+        transit = await self._orders.in_transit(store, products, received_after=min(taken) if taken else None)
         proposals = []
         for card in cards:
             if card.product_id in busy:

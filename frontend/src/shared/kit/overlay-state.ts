@@ -38,19 +38,30 @@ export const confirmStore = createStore<ConfirmRequest | null>(null)
 
 /** Qaytarib bo'lmaydigan amal oldidan: `if (await confirmAction({...})) ...` */
 export function confirmAction(req: Omit<ConfirmRequest, 'resolve'>): Promise<boolean> {
+  // Oldingi so'rov javobsiz qolmasin — "yo'q" deb yopiladi
+  confirmStore.get()?.resolve(false)
   return new Promise((resolve) => confirmStore.set({ ...req, resolve }))
+}
+
+/** Ochiq tasdiqlashni bekor qilish (masalan, sahifa almashganda). */
+export function dismissConfirm(): void {
+  const pending = confirmStore.get()
+  if (!pending) return
+  confirmStore.set(null)
+  pending.resolve(false)
 }
 
 // ---------------------------------------------------------------- toast
 
-export const toastStore = createStore<{ id: number; text: ReactNode } | null>(null)
+export const toastStore = createStore<{ id: number; text: ReactNode; error?: boolean } | null>(null)
 let toastTimer: ReturnType<typeof setTimeout> | undefined
 
-export function toast(text: ReactNode): void {
-  telegram.haptic.notify('success')
-  toastStore.set({ id: Date.now(), text })
+/** Qisqa xabar. `error` — xato (sahifa almashib, Banner ko'rsatib bo'lmaganda). */
+export function toast(text: ReactNode, options: { error?: boolean } = {}): void {
+  telegram.haptic.notify(options.error ? 'error' : 'success')
+  toastStore.set({ id: Date.now(), text, error: options.error })
   clearTimeout(toastTimer)
-  toastTimer = setTimeout(() => toastStore.set(null), 2400)
+  toastTimer = setTimeout(() => toastStore.set(null), options.error ? 5000 : 2400)
 }
 
 // ---------------------------------------------------------------- sahifa amallari

@@ -105,10 +105,13 @@ async def test_price_history_keeps_every_change(client: AsyncClient, admin_heade
         h,
     )
     body = {"pack_unit": "bag", "pack_factor": "50"}
-    for price, valid_from in (("610000", "2030-01-01"), ("640000", "2030-02-01")):
-        response = await client.put(
-            f"{API}/offers/{offer}", json={**body, "price": price, "price_valid_from": valid_from}, headers=h
-        )
+    # Kelajakdagi sana taqiqlangan (darhol amal qilib qolardi)
+    future = await client.put(
+        f"{API}/offers/{offer}", json={**body, "price": "700000", "price_valid_from": "2099-01-01"}, headers=h
+    )
+    assert future.json()["code"] == "invalid_offer"
+    for price in ("610000", "640000"):  # sana ko'rsatilmasa — bugun
+        response = await client.put(f"{API}/offers/{offer}", json={**body, "price": price}, headers=h)
         assert response.status_code == 204, response.text
 
     history = (await client.get(f"{API}/offers/{offer}/price-history", headers=h)).json()
@@ -119,7 +122,7 @@ async def test_price_history_keeps_every_change(client: AsyncClient, admin_heade
     ]
 
     backdated = await client.put(
-        f"{API}/offers/{offer}", json={**body, "price": "1", "price_valid_from": "2029-01-01"}, headers=h
+        f"{API}/offers/{offer}", json={**body, "price": "1", "price_valid_from": "2020-01-01"}, headers=h
     )
     assert backdated.json()["code"] == "invalid_offer"
 

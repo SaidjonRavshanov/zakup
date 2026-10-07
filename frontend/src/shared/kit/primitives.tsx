@@ -3,8 +3,10 @@
  * burchaklarda "+" belgilar (blueprint). Rang — faqat tokenlardan (app/styles/tokens.css).
  */
 import { ChevronRight, Info, Loader2, Minus, Plus, Search, TriangleAlert, X } from 'lucide-react'
-import type { CSSProperties, ChangeEvent, InputHTMLAttributes, ReactNode, TextareaHTMLAttributes } from 'react'
+import { cloneElement, isValidElement, useId } from 'react'
+import type { CSSProperties, ChangeEvent, InputHTMLAttributes, KeyboardEvent, ReactElement, ReactNode, TextareaHTMLAttributes } from 'react'
 import { cn } from '@/shared/lib/cn'
+import { LABELLABLE, labellable } from './field-controls'
 
 // ---------------------------------------------------------------- blueprint ramka
 
@@ -411,10 +413,22 @@ export function Banner({
   className?: string
 }) {
   const c = BANNER[tone]
+  // Bosiladigan banner — klaviaturadan ham (Enter / Space)
+  const clickable = onClick
+    ? {
+        role: 'button',
+        tabIndex: 0,
+        onClick,
+        onKeyDown: (e: KeyboardEvent<HTMLDivElement>) => {
+          if (e.target !== e.currentTarget || (e.key !== 'Enter' && e.key !== ' ')) return
+          e.preventDefault()
+          onClick()
+        },
+      }
+    : { role: tone === 'danger' ? 'alert' : undefined }
   return (
     <div
-      role={tone === 'danger' ? 'alert' : undefined}
-      onClick={onClick}
+      {...clickable}
       className={cn('mt-3 flex items-start gap-2.5 p-3 text-[14px]', onClick && 'cursor-pointer', className)}
       style={{ background: c.bg, color: c.fg }}
     >
@@ -464,17 +478,22 @@ export function RowsSkeleton({ n = 4 }: { n?: number }) {
 
 // ---------------------------------------------------------------- formalar
 
-export function Field({ label, hint, error, children, className }: {
+export function Field({ label, hint, error, children, className, id }: {
   label?: ReactNode
   hint?: ReactNode
   error?: ReactNode
   children: ReactNode
   className?: string
+  /** Boshqaruv elementi id'si; berilmasa — avtomatik (bola Input/Textarea/select bo'lsa). */
+  id?: string
 }) {
+  const autoId = useId()
+  const control = isValidElement<{ id?: string }>(children) && LABELLABLE.has(children.type) ? children : null
+  const controlId = id ?? control?.props.id ?? (control ? autoId : undefined)
   return (
     <div className={cn('field', className)}>
-      {label && <label>{label}</label>}
-      {children}
+      {label && <label htmlFor={controlId}>{label}</label>}
+      {control && !control.props.id ? cloneElement(control as ReactElement<{ id?: string }>, { id: controlId }) : children}
       {error ? (
         <div className="mt-1 text-[13px] text-danger">{error}</div>
       ) : (
@@ -497,6 +516,9 @@ export function Input({ className, invalid, ...rest }: InputHTMLAttributes<HTMLI
 export function Textarea({ className, ...rest }: TextareaHTMLAttributes<HTMLTextAreaElement>) {
   return <textarea {...rest} className={cn('input min-h-[72px] text-[16px]', className)} />
 }
+
+labellable(Input)
+labellable(Textarea)
 
 export function SearchInput({
   value,
@@ -545,15 +567,19 @@ export function Stepper({
   size?: 56 | 64
   label?: string
 }) {
-  const num = Number(value.replace(/\s/g, '').replace(',', '.'))
-  const set = (v: number) => onChange(String(Math.max(min, Math.round(v * 1000) / 1000)).replace('.', ','))
+  const parsed = Number(value.replace(/\s/g, '').replace(',', '.'))
+  const num = Number.isFinite(parsed) ? parsed : 0
+  const set = (v: number) => onChange(String(Math.round(v * 10_000) / 10_000).replace('.', ','))
+  // "−" qiymatni hech qachon oshirmaydi: min'dan kichik qiymat o'z joyida qoladi (sakramaydi)
+  const dec = () => set(Math.max(Math.min(min, num), num - step))
+  const inc = () => set(Math.max(min, num + step))
   const cell = size === 64 ? 'min-h-16' : 'min-h-14'
   return (
     <div className="grid border border-line" style={{ gridTemplateColumns: `${size}px minmax(0,1fr) ${size}px` }}>
       <button
         type="button"
         aria-label="−"
-        onClick={() => set((Number.isFinite(num) ? num : 0) - step)}
+        onClick={dec}
         className={cn('grid place-items-center border-r border-line text-ink active:bg-a2', cell)}
       >
         <Minus size={20} />
@@ -575,7 +601,7 @@ export function Stepper({
       <button
         type="button"
         aria-label="+"
-        onClick={() => set((Number.isFinite(num) ? num : 0) + step)}
+        onClick={inc}
         className={cn('grid place-items-center border-l border-line text-ink active:bg-a2', cell)}
       >
         <Plus size={20} />

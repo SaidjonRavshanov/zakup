@@ -96,7 +96,8 @@ export default function IikoSyncPage() {
                   {isAdmin && (
                     <Btn
                       className="min-h-10 min-w-[84px]"
-                      disabled={busy}
+                      disabled={busy || request.isPending}
+                      loading={request.isPending && request.variables?.server_code === server.code && request.variables.kind === kind}
                       style={{ opacity: busy ? 0.5 : 1 }}
                       onClick={() => request.mutate({ server_code: server.code, kind, days })}
                     >

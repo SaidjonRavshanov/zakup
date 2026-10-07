@@ -1,7 +1,7 @@
 /** /catalog/suppliers/$supplierId/offers/new va .../offers/$offerId — prototipda ekran yo'q, kit Field/Input/Chips bilan. */
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useNavigate, useParams } from '@tanstack/react-router'
-import { useState, type FormEvent } from 'react'
+import { useDeferredValue, useState, type FormEvent } from 'react'
 import {
   CATALOG_KEY,
   PACK_UNITS,
@@ -11,12 +11,13 @@ import {
   supplierQuery,
   type Offer,
   type OfferInput,
+  type ProductListItem,
 } from '@/entities/catalog'
 import { describeError } from '@/shared/api/errors'
 import { useI18n } from '@/shared/i18n'
 import { useZk } from '@/shared/i18n/use-zk'
 import type { UnitCode } from '@/shared/i18n/keys'
-import { Banner, Chips, Empty, Field, Input, KV, PageHead, RowsSkeleton, Section, confirmAction, toast, usePageActions } from '@/shared/kit'
+import { Banner, Chips, Empty, Field, Input, KV, PageHead, RowsSkeleton, SearchInput, Section, confirmAction, toast, usePageActions } from '@/shared/kit'
 import { Select, SuffixInput } from './form-ui'
 
 export default function OfferFormPage() {
@@ -38,10 +39,16 @@ function OfferForm({ supplierId, supplierName, offer }: { supplierId: string; su
   const o = t.catalog.offer
   const navigate = useNavigate()
   const queryClient = useQueryClient()
-  const { data: products = [] } = useQuery({ ...productsQuery(), enabled: !offer })
+  // Mahsulot qidiruvi — serverda (katalog 200 tadan ko'p bo'lishi mumkin)
+  const [search, setSearch] = useState('')
+  const query = useDeferredValue(search.trim())
+  const { data: found = [] } = useQuery({ ...productsQuery(query), enabled: !offer })
   const { data: history = [] } = useQuery({ ...priceHistoryQuery(offer?.id ?? ''), enabled: Boolean(offer) })
 
-  const [productId, setProductId] = useState('')
+  const [picked, setPicked] = useState<ProductListItem | null>(null)
+  const productId = picked?.id ?? ''
+  // Tanlangan mahsulot yangi qidiruv natijasida bo'lmasa ham ro'yxatda qoladi
+  const products = picked && !found.some((p) => p.id === picked.id) ? [picked, ...found] : found
   const [validFrom, setValidFrom] = useState('')
   const [form, setForm] = useState<OfferInput>({
     pack_unit: offer?.pack_unit ?? 'bag',
@@ -99,14 +106,20 @@ function OfferForm({ supplierId, supplierName, offer }: { supplierId: string; su
         {offer ? (
           <KV rows={[[o.product, `${offer.product_name} · ${f.unit(offer.base_unit)}`]]} />
         ) : (
-          <Field label={o.product}>
-            <Select
-              required
-              value={productId}
-              options={[{ value: '', label: o.pickProduct }, ...products.map((p) => ({ value: p.id, label: `${p.name} · ${f.unit(p.base_unit)}` }))]}
-              onChange={(e) => setProductId(e.target.value)}
-            />
-          </Field>
+          <>
+            {/* Qidiruvdagi Enter formani yubormasin */}
+            <div onKeyDown={(e) => e.key === 'Enter' && e.preventDefault()}>
+              <SearchInput value={search} onChange={setSearch} placeholder={z.search_prod} />
+            </div>
+            <Field label={o.product}>
+              <Select
+                required
+                value={productId}
+                options={[{ value: '', label: o.pickProduct }, ...products.map((p) => ({ value: p.id, label: `${p.name} · ${f.unit(p.base_unit)}` }))]}
+                onChange={(e) => setPicked(products.find((p) => p.id === e.target.value) ?? null)}
+              />
+            </Field>
+          </>
         )}
 
         <Field label={o.packUnit}>

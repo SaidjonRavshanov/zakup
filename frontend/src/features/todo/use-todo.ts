@@ -6,8 +6,8 @@ import { useQuery } from '@tanstack/react-query'
 import { controlQuery, type ControlKind } from '@/entities/analytics'
 import { iikoSyncQuery, type SyncRun } from '@/entities/iiko'
 import { balancesQuery, paymentsQuery } from '@/entities/payment'
-import { purchaseOrdersQuery } from '@/entities/purchase-order'
-import { requestsQuery } from '@/entities/purchase-request'
+import { OPEN_STATUSES, purchaseOrdersQuery } from '@/entities/purchase-order'
+import { OPEN_REQUEST_STATUSES, requestsByStatusQuery } from '@/entities/purchase-request'
 import { receiptsQuery } from '@/entities/receipt'
 import { meQuery, useActiveRole, usersQuery, type Role } from '@/entities/user'
 import { todayIso, useZk, type ZkKey } from '@/shared/i18n/use-zk'
@@ -48,8 +48,8 @@ export function useTodo(): { items: TodoItem[]; role: Role | null; loading: bool
 
   const users = useQuery({ ...usersQuery, enabled: has('admin') })
   const iiko = useQuery({ ...iikoSyncQuery, enabled: has('admin') })
-  const orders = useQuery({ ...purchaseOrdersQuery(), enabled: has('storekeeper', 'buyer', 'approver', 'admin') })
-  const requests = useQuery({ ...requestsQuery, enabled: has('approver', 'admin', 'buyer', 'initiator') })
+  const orders = useQuery({ ...purchaseOrdersQuery(OPEN_STATUSES), enabled: has('storekeeper', 'buyer', 'approver', 'admin') })
+  const requests = useQuery({ ...requestsByStatusQuery(OPEN_REQUEST_STATUSES), enabled: has('approver', 'admin', 'buyer', 'initiator') })
   const payments = useQuery({ ...paymentsQuery(), enabled: has('approver', 'admin', 'accountant') })
   const receipts = useQuery({ ...receiptsQuery, enabled: has('buyer', 'approver', 'admin') })
   const balances = useQuery({ ...balancesQuery, enabled: has('accountant') })

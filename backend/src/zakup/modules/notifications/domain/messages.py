@@ -19,6 +19,7 @@ class Kind(StrEnum):
     AUTO_DRAFT = "auto_draft"
     ORDER_CONFIRMED = "order_confirmed"
     ORDER_REAPPROVAL = "order_reapproval"
+    ORDER_CHANGES_APPROVED = "order_changes_approved"
     RECEIPT_DISPUTED = "receipt_disputed"
     PAYMENT_TO_APPROVE = "payment_to_approve"
     PAYMENT_TO_PAY = "payment_to_pay"
@@ -79,6 +80,10 @@ _TEMPLATES: dict[Kind, dict[str, str]] = {
     Kind.ORDER_REAPPROVAL: {
         "ru": "⚠️ <b>{supplier} изменил цену в заказе {number}</b> — нужно переутверждение\n{store} · {amount}",
         "uz": "⚠️ <b>{supplier} {number} buyurtmada narxni o'zgartirdi</b> — qayta tasdiqlash kerak\n{store} · {amount}",
+    },
+    Kind.ORDER_CHANGES_APPROVED: {
+        "ru": "✅ <b>Изменения в заказе {number} утверждены</b>\n{supplier} · {store} · {amount}",
+        "uz": "✅ <b>{number} buyurtmadagi o'zgarishlar tasdiqlandi</b>\n{supplier} · {store} · {amount}",
     },
     Kind.RECEIPT_DISPUTED: {
         "ru": "⚠️ <b>Спор по приёмке {number}</b>\n{supplier} · {store} · {amount}",

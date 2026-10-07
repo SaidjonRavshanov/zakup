@@ -3,16 +3,19 @@
  * bo'lsa 4 ta + "Ещё"), ichki sahifada — Telegram "Назад". Desktop (≥1024px) — chap menyu 232px.
  * Sahifa asosiy amallarini `usePageActions` bilan e'lon qiladi — pastki qotirilgan panelda chiqadi.
  */
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Outlet, useRouter, useRouterState } from '@tanstack/react-router'
 import { ChevronLeft, Ellipsis } from 'lucide-react'
 import { useEffect, useRef, useState, useSyncExternalStore } from 'react'
+import { ORDERS_KEY } from '@/entities/purchase-order'
+import { RECEIPTS_KEY } from '@/entities/receipt'
 import { meQuery, useActiveRole } from '@/entities/user'
 import { useTodo } from '@/features/todo'
 import { useZk } from '@/shared/i18n/use-zk'
-import { ActionBar, Btn, ConfirmHost, Sheet, ToastHost } from '@/shared/kit'
+import { ActionBar, Btn, ConfirmHost, Sheet, ToastHost, dismissConfirm, toast } from '@/shared/kit'
 import { cn } from '@/shared/lib/cn'
 import { isInTelegram, telegram } from '@/shared/lib/telegram'
+import { onReceiptSent } from '@/shared/offline/outbox'
 import { MENU, NAV, isRootPath, isWidePath, sectionOf, type NavKey } from './nav'
 
 /** To'liq ekranda Telegram o'z tugmalarini tepada chizadi — kontent ulardan pastda boshlanadi. */
@@ -35,6 +38,7 @@ function useDesktop(): boolean {
 export function AppShell() {
   const { z } = useZk()
   const router = useRouter()
+  const queryClient = useQueryClient()
   const path = useRouterState({ select: (s) => s.location.pathname })
   const { data: me } = useQuery(meQuery)
   const role = useActiveRole(me)
@@ -51,7 +55,7 @@ export function AppShell() {
   }
   const back = () => {
     // Havola orqali to'g'ridan-to'g'ri ochilgan bo'lsa — tarix yo'q: bo'limga qaytamiz
-    if (window.history.state?.idx > 0 || window.history.length > 1) router.history.back()
+    if (router.history.canGoBack()) router.history.back()
     else router.history.push(section)
   }
 
@@ -64,9 +68,21 @@ export function AppShell() {
     if (root) return telegram.backButton(null)
     return telegram.backButton(() => backRef.current())
   }, [root])
+  // Sahifa almashsa ochiq tasdiqlash oynasi yopiladi (scroll — router scrollRestoration'da)
   useEffect(() => {
-    window.scrollTo(0, 0)
+    dismissConfirm()
   }, [path])
+
+  // Oflayn navbatdagi qabul yuborilganda — qaysi sahifada bo'lmasin ro'yxatlar yangilanadi
+  useEffect(
+    () =>
+      onReceiptSent(() => {
+        toast(z.toast_synced)
+        void queryClient.invalidateQueries({ queryKey: ORDERS_KEY })
+        void queryClient.invalidateQueries({ queryKey: RECEIPTS_KEY })
+      }),
+    [queryClient, z],
+  )
 
   const phoneItems: Array<NavKey | 'more'> = menu.length > 5 ? [...menu.slice(0, 4), 'more'] : menu
   const moreItems = menu.length > 5 ? menu.slice(4) : []

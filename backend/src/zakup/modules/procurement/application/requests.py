@@ -249,6 +249,8 @@ class ApproveRequest:
         async with self._uow:
             request = await _load(self._requests, request_id)
             actor.require(*DECIDERS, store_id=request.store_id)
+            if request.status is RequestStatus.PENDING_APPROVAL:
+                request.reprice(await self._current_choices(request))
             request.approve(actor, self._policy, at=self._clock(), line_ids=line_ids)
             order_ids = await self._split(request, actor)
             request.mark_split()
@@ -256,6 +258,16 @@ class ApproveRequest:
             self._uow.track(request)
             await self._uow.commit()
             return order_ids
+
+    async def _current_choices(self, request: PurchaseRequest) -> dict[UUID, OfferChoice]:
+        choices = {}
+        for line in request.lines:
+            if line.offer is None:
+                continue
+            offer = await self._catalog.offer(line.offer.offer_id)
+            if offer is not None and offer.available:
+                choices[line.id] = offer_choice(offer)
+        return choices
 
     async def _split(self, request: PurchaseRequest, actor: Principal) -> list[UUID]:
         by_supplier: dict[UUID, list[NewOrderLine]] = defaultdict(list)

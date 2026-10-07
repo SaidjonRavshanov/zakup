@@ -170,7 +170,7 @@ def worker(engine: AsyncEngine, settings: Settings) -> Worker:
     clock = lambda: datetime(2026, 10, 3, 6, tzinfo=UTC)  # noqa: E731 — fixture nakladnoylari sanasi
     return Worker(
         sync=RunNextSync(gateway, iiko_scope_factory(sessions), clock=clock),
-        relay=OutboxRelay(sessions, outbox_handlers()),
+        relay=OutboxRelay(sessions, outbox_handlers(settings)),
         export=build_invoice_exporter(settings, gateway, sessions),
         state=state,
     )

@@ -2,6 +2,7 @@
 
 import hashlib
 from datetime import datetime
+from decimal import ROUND_HALF_UP, Decimal
 from pathlib import Path
 from typing import Any
 from uuid import UUID
@@ -248,7 +249,8 @@ class SqlExportStore:
                         product_id=line.product_id,
                         qty=qty,
                         price=line.price_fact,
-                        amount=round(qty * line.price_fact, 2),
+                        # Domen bilan bir xil: half-up (round() — bankir yaxlitlashi, 0.01 farq beradi)
+                        amount=(qty * line.price_fact).quantize(Decimal("0.01"), ROUND_HALF_UP),
                     )
                 )
         return ReceiptForExport(

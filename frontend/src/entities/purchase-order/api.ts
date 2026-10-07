@@ -103,11 +103,25 @@ const toDetail = (dto: OrderDetailDto): PurchaseOrderDetail => ({
 
 export const ORDERS_KEY = ['purchase-orders'] as const
 
-export const purchaseOrdersQuery = () =>
-  queryOptions({
-    queryKey: [...ORDERS_KEY, 'list'],
-    queryFn: async ({ signal }) => (await apiRequest<OrderListDto[]>('/procurement/orders?limit=200', { signal })).map(toOrder),
+/**
+ * Buyurtmalar ro'yxati (eng yangi 200 tasi). `statuses` — server tomonda filtr (`?status=A&status=B`):
+ * ish ro'yxatlari (qabul, vazifalar) eski buyurtmalar ko'p bo'lsa ham to'liq bo'lishi uchun.
+ */
+export const purchaseOrdersQuery = (statuses?: ReadonlyArray<PurchaseOrderStatus>) => {
+  const filter = statuses?.length ? [...statuses].sort() : null
+  const search = new URLSearchParams({ limit: '200' })
+  for (const value of filter ?? []) search.append('status', value)
+  return queryOptions({
+    queryKey: [...ORDERS_KEY, 'list', filter?.join(',') ?? 'all'],
+    queryFn: async ({ signal }) => (await apiRequest<OrderListDto[]>(`/procurement/orders?${search}`, { signal })).map(toOrder),
   })
+}
+
+/** Qabul qilinishi mumkin bo'lgan holatlar (backend RECEIVABLE bilan bir xil). */
+export const RECEIVABLE_STATUSES: ReadonlyArray<PurchaseOrderStatus> = ['SENT', 'CONFIRMED', 'PARTIALLY_CONFIRMED']
+
+/** Hali yopilmagan buyurtmalar (vazifalar, bugungi yetkazmalar). */
+export const OPEN_STATUSES: ReadonlyArray<PurchaseOrderStatus> = ['CREATED', 'SENT', 'CONFIRMED', 'PARTIALLY_CONFIRMED', 'REAPPROVAL']
 
 export const purchaseOrderQuery = (id: string) =>
   queryOptions({

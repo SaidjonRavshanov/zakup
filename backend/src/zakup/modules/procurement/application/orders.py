@@ -174,6 +174,7 @@ class ApproveOrderChanges:
             self._policy.ensure_can_approve(actor, order.store_id, order.confirmed_total)
             order.approve_changes()
             await self._orders.save(order)
+            self._uow.track(order)
             await self._uow.commit()
             return order.status
 

@@ -1,5 +1,6 @@
 import type { RequestType } from '@/entities/purchase-request'
 import type { Zk, ZkFormat } from '@/shared/i18n/use-zk'
+import { parseDecimal } from '@/shared/lib/format'
 
 /** Zayavka turi: manual → Обычная, event → Банкет, auto → Авто. */
 export function typeLabel(z: Zk, type: RequestType): string {
@@ -13,12 +14,12 @@ export function qtyStep(unit: string): number {
 
 /** "12,5" / "12.5" → 12.5 (bo'sh / noto'g'ri → NaN). */
 export function parseQty(raw: string): number {
-  return Number(raw.replace(/\s/g, '').replace(',', '.'))
+  return parseDecimal(raw) ?? Number.NaN
 }
 
-/** Backend uchun: "12,5" → "12.5". */
+/** Backend uchun: "12,5" → "12.5" (4 kasrgacha — backend Decimal(…, 4)). */
 export function qtyBody(raw: string): string {
-  return String(parseQty(raw))
+  return String(Number(parseQty(raw).toFixed(4)))
 }
 
 export interface PackOffer {

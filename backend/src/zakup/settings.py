@@ -24,7 +24,8 @@ class Settings(BaseSettings):
 
     model_config = SettingsConfigDict(env_file=".env", env_prefix="ZAKUP_", extra="ignore")
 
-    env: Literal["local", "test", "production"] = "local"
+    # Xavfsiz default: .env'da unutilsa ham dev rejim (dev JWT kaliti, /api/docs) yoqilmaydi
+    env: Literal["local", "test", "production"] = "production"
     debug: bool = False
 
     database_url: PostgresDsn = Field(

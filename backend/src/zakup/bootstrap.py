@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import Annotated, Any, Protocol, TypeVar
 from uuid import UUID
 
+import structlog
 from fastapi import APIRouter, Depends, FastAPI
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
@@ -531,9 +532,9 @@ def _wire_finance(overrides: Overrides, per_request: PerRequest, settings: Setti
         ListBalances: lambda s: ListBalances(reader(s), payments(s), suppliers(s)),
         GetSupplierAccount: lambda s: GetSupplierAccount(reader(s), payments(s), suppliers(s)),
         CreatePayment: lambda s: CreatePayment(uow(s), payments(s), obligations(s), finance_settings),
-        ApprovePayment: lambda s: ApprovePayment(uow(s), payments(s)),
-        RejectPayment: lambda s: RejectPayment(uow(s), payments(s)),
-        CancelPayment: lambda s: CancelPayment(uow(s), payments(s)),
+        ApprovePayment: lambda s: ApprovePayment(uow(s), payments(s), obligations(s)),
+        RejectPayment: lambda s: RejectPayment(uow(s), payments(s), obligations(s)),
+        CancelPayment: lambda s: CancelPayment(uow(s), payments(s), obligations(s)),
         # To'lov tasdig'i — umumiy fayl omborida (receiving.attachments)
         PayPayment: lambda s: PayPayment(uow(s), payments(s), obligations(s), LocalAttachments(s, media)),
         ListPayments: lambda s: ListPayments(reader(s), suppliers(s)),
@@ -593,7 +594,13 @@ def outbox_handlers(settings: Settings | None = None) -> dict[str, Callable[[Asy
         async def handle(session: AsyncSession, payload: dict[str, Any]) -> None:
             if first is not None:
                 await first(session, payload)
-            await notifier(session)(event_type, payload)
+            # Bot xatosi asosiy reaksiyani (majburiyat, iiko navbati) qaytarmasin: alohida savepoint,
+            # xato — logga; xabar yo'qoladi, hisob-kitob emas
+            try:
+                async with session.begin_nested():
+                    await notifier(session)(event_type, payload)
+            except Exception:
+                structlog.get_logger().exception("notification_enqueue_failed", event_type=event_type)
 
         return handle
 

@@ -1,5 +1,6 @@
 export * from './primitives'
 export * from './overlays'
-export { confirmAction, toast, usePageActions, type PageAction, type PageActions } from './overlay-state'
+export { confirmAction, dismissConfirm, toast, usePageActions, type PageAction, type PageActions } from './overlay-state'
 export { status, type StatusKind } from './status'
 export { Picker, type PickerOption } from './Picker'
+export { labellable } from './field-controls'

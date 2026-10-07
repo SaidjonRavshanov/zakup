@@ -60,7 +60,10 @@ class PgAdvisoryLock:
     @asynccontextmanager
     async def __call__(self, name: str) -> AsyncIterator[None]:
         key = f"iiko:{name}"
-        async with self._engine.connect() as conn:
+        # AUTOCOMMIT: ochiq tranzaksiya yo'q — aks holda idle_in_transaction_session_timeout (10 s)
+        # ulanishni yopadi va sessiya darajasidagi lock ham yo'qoladi (uzun sinxronda ikkinchi iiko sessiyasi)
+        async with self._engine.connect() as raw:
+            conn = await raw.execution_options(isolation_level="AUTOCOMMIT")
             deadline = asyncio.get_running_loop().time() + self._wait_s
             while not await conn.scalar(text("SELECT pg_try_advisory_lock(hashtext(:k))"), {"k": key}):
                 if asyncio.get_running_loop().time() > deadline:
@@ -69,7 +72,10 @@ class PgAdvisoryLock:
             try:
                 yield
             finally:
-                await conn.scalar(text("SELECT pg_advisory_unlock(hashtext(:k))"), {"k": key})
+                try:
+                    await conn.scalar(text("SELECT pg_advisory_unlock(hashtext(:k))"), {"k": key})
+                except Exception:  # ulanish uzilgan bo'lsa lock o'zi bo'shagan — natijani yo'qotmaymiz
+                    log.warning("iiko_lock_release_failed", server=name)
 
 
 class _HttpReader:

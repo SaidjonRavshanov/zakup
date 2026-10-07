@@ -28,6 +28,17 @@ export function setActiveRole(role: Role): void {
   listeners.forEach((listener) => listener())
 }
 
+/** Chiqishda: saqlangan tanlovni o'chirish (keyingi foydalanuvchiga o'tmasin). */
+export function clearActiveRole(): void {
+  chosen = null
+  try {
+    localStorage.removeItem(STORAGE_KEY)
+  } catch {
+    /* e'tiborsiz */
+  }
+  listeners.forEach((listener) => listener())
+}
+
 const subscribe = (listener: () => void) => {
   listeners.add(listener)
   return () => listeners.delete(listener)

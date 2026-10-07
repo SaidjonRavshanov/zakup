@@ -3,7 +3,7 @@ import { useQuery } from '@tanstack/react-query'
 import { useNavigate, useParams } from '@tanstack/react-router'
 import { FileText, Plus } from 'lucide-react'
 import { OfferRow, WEEKDAYS, supplierQuery } from '@/entities/catalog'
-import { meQuery, useActiveRole, useHasRole } from '@/entities/user'
+import { useHasRole } from '@/entities/user'
 import { useI18n } from '@/shared/i18n'
 import { useZk } from '@/shared/i18n/use-zk'
 import { Btn, Empty, KV, PageHead, RowsSkeleton, Section, Skeleton, Tag, usePageActions } from '@/shared/kit'
@@ -34,8 +34,8 @@ export default function SupplierPage() {
   const { t } = useI18n()
   const { z, f } = useZk()
   const canEdit = useHasRole('buyer', 'admin')
-  const { data: me } = useQuery(meQuery)
-  const role = useActiveRole(me)
+  // Yetkazuvchi hisobi — faqat moliyani ko'ra oladigan rollar (backend finance VIEWERS)
+  const canFinance = useHasRole('accountant', 'approver', 'buyer', 'auditor', 'admin')
   const { data: supplier, isPending, error } = useQuery(supplierQuery(supplierId))
 
 
@@ -125,7 +125,7 @@ export default function SupplierPage() {
         ))
       )}
 
-      {role !== null && role !== 'initiator' && (
+      {canFinance && (
         <Btn
           block
           size="lg"

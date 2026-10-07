@@ -3,7 +3,7 @@
 from typing import Any
 from uuid import UUID
 
-from sqlalchemy import select
+from sqlalchemy import exists, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from zakup.modules.finance.application.dto import ObligationView, PaymentDetail, PaymentLineView, PaymentListItem
@@ -40,6 +40,15 @@ def _list_item(row: Any) -> PaymentListItem:
     )
 
 
+def _in_stores(payment_id: Any, store_ids: set[UUID]) -> Any:
+    """Zayavkada shu omborlardan kamida bitta nakladnoy bor."""
+    return exists(
+        select(payment_lines.c.payment_id)
+        .join(obligations, obligations.c.id == payment_lines.c.obligation_id)
+        .where(payment_lines.c.payment_id == payment_id, obligations.c.store_id.in_(store_ids))
+    )
+
+
 class SqlFinanceReader:
     def __init__(self, session: AsyncSession) -> None:
         self._session = session
@@ -57,17 +66,27 @@ class SqlFinanceReader:
         return [_obligation(row) for row in (await self._session.execute(query)).all()]
 
     async def payments(
-        self, *, statuses: set[PaymentStatus] | None, supplier_id: UUID | None, limit: int
+        self,
+        *,
+        statuses: set[PaymentStatus] | None,
+        supplier_id: UUID | None,
+        limit: int,
+        store_ids: set[UUID] | None = None,
     ) -> list[PaymentListItem]:
         query = select(payment_requests).order_by(payment_requests.c.requested_at.desc(), payment_requests.c.id.desc())
+        if store_ids is not None:
+            query = query.where(_in_stores(payment_requests.c.id, store_ids))
         if statuses:
             query = query.where(payment_requests.c.status.in_([s.value for s in statuses]))
         if supplier_id is not None:
             query = query.where(payment_requests.c.supplier_id == supplier_id)
         return [_list_item(row) for row in (await self._session.execute(query.limit(limit))).all()]
 
-    async def payment(self, payment_id: UUID) -> PaymentDetail | None:
-        row = (await self._session.execute(select(payment_requests).where(payment_requests.c.id == payment_id))).first()
+    async def payment(self, payment_id: UUID, store_ids: set[UUID] | None = None) -> PaymentDetail | None:
+        query = select(payment_requests).where(payment_requests.c.id == payment_id)
+        if store_ids is not None:
+            query = query.where(_in_stores(payment_requests.c.id, store_ids))
+        row = (await self._session.execute(query)).first()
         if row is None:
             return None
         lines = await self._session.execute(

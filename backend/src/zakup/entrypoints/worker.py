@@ -8,6 +8,7 @@ iiko bilan faqat shu process gaplashadi (ADR-05); bir nechta worker bo'lsa ham s
 import asyncio
 import contextlib
 import signal
+from collections.abc import Awaitable, Callable
 
 import structlog
 
@@ -46,10 +47,28 @@ async def main() -> None:
         with contextlib.suppress(NotImplementedError):  # Windows: add_signal_handler yo'q
             asyncio.get_running_loop().add_signal_handler(sig, stop.set)
 
+    async def step(name: str, run: Callable[[], Awaitable[object]]) -> bool:
+        """Bitta qadam xatosi (DB uzilishi, Telegram, iiko) butun worker'ni to'xtatmasin — logga va keyingisiga."""
+        try:
+            return bool(await run())
+        except Exception:
+            log.exception("worker_step_failed", step=name)
+            return False
+
+    steps: list[tuple[str, Callable[[], Awaitable[object]]]] = [
+        ("daily", daily),
+        ("outbox", relay),
+        ("notifications", send_next),
+        ("iiko_sync", run_next),
+        ("iiko_export", export_next),
+    ]
+
     log.info("worker_started", iiko_servers=[s.code for s in settings.iiko_servers])
     try:
         while not stop.is_set():
-            busy = await daily() | bool(await relay()) | await send_next() | await run_next() | await export_next()
+            busy = False
+            for name, run in steps:
+                busy |= await step(name, run)
             if not busy:
                 with contextlib.suppress(TimeoutError):
                     await asyncio.wait_for(stop.wait(), POLL_INTERVAL_S)

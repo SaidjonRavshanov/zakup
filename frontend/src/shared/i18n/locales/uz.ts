@@ -53,10 +53,8 @@ export const uz = {
     CONFIRMED: 'Tasdiqlandi',
     PARTIALLY_CONFIRMED: 'Qisman',
     REAPPROVAL: 'Qayta tasdiq',
-    RECEIVING: 'Qabulda',
     RECEIVED: 'Qabul qilindi',
     PARTIALLY_RECEIVED: 'Qisman keldi',
-    CLOSED: 'Yopildi',
     CANCELLED: 'Bekor',
   } satisfies Record<PurchaseOrderStatusKey, string>,
   apiStatus: {

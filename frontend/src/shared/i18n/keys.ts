@@ -5,10 +5,8 @@ export type PurchaseOrderStatusKey =
   | 'CONFIRMED'
   | 'PARTIALLY_CONFIRMED'
   | 'REAPPROVAL'
-  | 'RECEIVING'
   | 'RECEIVED'
   | 'PARTIALLY_RECEIVED'
-  | 'CLOSED'
   | 'CANCELLED'
 
 export type RoleKey = 'initiator' | 'buyer' | 'approver' | 'storekeeper' | 'accountant' | 'auditor' | 'admin'

@@ -1,6 +1,7 @@
 """Qabul use case'lari (WORKFLOW B8, B9). Ruxsat — ombor doirasida (ARCHITECTURE §7)."""
 
 from dataclasses import replace
+from datetime import datetime, timedelta
 from uuid import UUID
 
 from zakup.modules.receiving.application.dto import ReceiptDetail, ReceiptListItem, SubmitReceiptCommand
@@ -34,6 +35,20 @@ DECIDERS = (Role.APPROVER, Role.BUYER, Role.ADMIN)
 VIEWERS = (Role.STOREKEEPER, Role.BUYER, Role.APPROVER, Role.ADMIN, Role.AUDITOR, Role.ACCOUNTANT)
 MAX_FILE_BYTES = 10 * 1024 * 1024
 ALLOWED_TYPES = frozenset({"image/jpeg", "image/png", "image/webp", "application/pdf"})
+
+
+# Oflayn qabul: telefondagi vaqt — lekin kelajak (soat noto'g'ri) va juda eski sana qabul qilinmaydi
+MAX_OFFLINE_AGE = timedelta(days=7)
+CLOCK_SKEW = timedelta(minutes=10)
+
+
+def _received_at(captured_at: datetime | None, now: datetime) -> datetime:
+    """Qabul sanasi muddat (to'lov), iiko kirim sanasi uchun: oflayn bo'lsa — rasmiylashtirilgan vaqt."""
+    if captured_at is None or captured_at.tzinfo is None:
+        return now
+    if captured_at > now + CLOCK_SKEW or captured_at < now - MAX_OFFLINE_AGE:
+        return now
+    return min(captured_at, now)
 
 
 class SubmitReceipt:
@@ -78,7 +93,7 @@ class SubmitReceipt:
                     store_id=order.store_id,
                     supplier_id=order.supplier_id,
                     received_by=actor.user_id,
-                    received_at=self._clock(),
+                    received_at=_received_at(cmd.captured_at, self._clock()),
                     supplier_invoice_no=cmd.supplier_invoice_no,
                     payment_method=cmd.payment_method,
                     invoice_photo_id=cmd.invoice_photo_id,

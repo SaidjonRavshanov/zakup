@@ -16,6 +16,30 @@ export function fill(template: string, vars: Record<string, string | number>): s
 const UNIT_KEY: Record<string, ZkKey> = { kg: 'u_kg', g: 'u_g', l: 'u_l', ml: 'u_ml', pcs: 'u_pc', pc: 'u_pc' }
 const PACK_KEY: Record<string, ZkKey> = { bag: 'pk_bag', box: 'pk_box', pack: 'pk_pack', can: 'pk_can', tray: 'pk_tray' }
 
+/**
+ * Ruscha ko'plik: 1 задача, 2 задачи, 5 задач (one / few / many). O'zbekchada son bilan so'z o'zgarmaydi.
+ * `forms` — [one, few, many].
+ */
+export function plural(locale: Locale, n: number, forms: readonly [string, string, string], uz: string): string {
+  if (locale === 'uz') return uz
+  const a = Math.abs(n) % 100
+  const b = a % 10
+  if (!Number.isInteger(n)) return forms[1]
+  if (a >= 11 && a <= 14) return forms[2]
+  if (b === 1) return forms[0]
+  if (b >= 2 && b <= 4) return forms[1]
+  return forms[2]
+}
+
+/** Lug'atdagi "N ta ..." so'zlarining ruscha shakllari (zk.ts da faqat "many" shakli bor). */
+const RU_FORMS: Partial<Record<ZkKey, readonly [string, string, string]>> = {
+  tasks_n: ['задача', 'задачи', 'задач'],
+  receipts_n: ['приёмка', 'приёмки', 'приёмок'],
+  drafts_n: ['черновик', 'черновика', 'черновиков'],
+  orders_n: ['заказ', 'заказа', 'заказов'],
+  auto_lines: ['позиция', 'позиции', 'позиций'],
+}
+
 /** Toshkent bo'yicha bugungi sana (ISO). */
 export function todayIso(offsetDays = 0): string {
   const now = new Date(Date.now() + 5 * 3600_000 + offsetDays * 86_400_000)
@@ -38,6 +62,8 @@ export interface ZkFormat {
   dtTime(iso: string | null | undefined): string
   time(iso: string): string
   pct(value: number | string): string
+  /** Son + to'g'ri shakl: cnt(3, 'tasks_n') → "3 задачи" / "3 vazifa". */
+  cnt(value: number, key: ZkKey): string
 }
 
 function createZkFormat(locale: Locale, z: Zk): ZkFormat {
@@ -80,6 +106,10 @@ function createZkFormat(locale: Locale, z: Zk): ZkFormat {
     pct: (value) => {
       const x = Number(value)
       return `${x > 0 ? '+' : ''}${n(x, 1)}%`
+    },
+    cnt: (value, key) => {
+      const forms = RU_FORMS[key]
+      return `${n(value, 0)}${NBSP}${forms ? plural(locale, value, forms, z[key]) : z[key]}`
     },
   }
 }

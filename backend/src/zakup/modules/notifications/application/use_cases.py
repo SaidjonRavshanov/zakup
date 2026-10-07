@@ -58,6 +58,7 @@ class NotifyOnEvent:
         "procurement.request_decided": "_request_decided",
         "procurement.auto_request_drafted": "_auto_drafted",
         "procurement.order_responded": "_order_responded",
+        "procurement.order_changes_approved": "_order_changes_approved",
         "receiving.receipt_disputed": "_receipt_disputed",
         "finance.payment_submitted": "_payment_submitted",
         "finance.payment_approved": "_payment_approved",
@@ -157,6 +158,14 @@ class NotifyOnEvent:
             to = await self._one(order.sent_by) or await self._dir.with_roles(MANAGERS, order.store_id)
             return self._build(key, to, Kind.ORDER_CONFIRMED, facts, path, skip=set())
         return []
+
+    async def _order_changes_approved(self, key: UUID, p: dict[str, Any]) -> list[OutgoingMessage]:
+        order = await self._dir.order(UUID(p["aggregate_id"]))
+        if order is None:
+            return []
+        facts = Facts(number=order.number, store=order.store, supplier=order.supplier, amount=str(order.amount))
+        to = await self._one(order.sent_by) or await self._dir.with_roles(MANAGERS, order.store_id)
+        return self._build(key, to, Kind.ORDER_CHANGES_APPROVED, facts, f"/orders/{p['aggregate_id']}", skip=set())
 
     async def _receipt_disputed(self, key: UUID, p: dict[str, Any]) -> list[OutgoingMessage]:
         receipt = await self._dir.receipt(UUID(p["aggregate_id"]))
@@ -264,6 +273,7 @@ class SendNextMessage:
         message = await self._queue.next_pending(now)
         if message is None:
             return False
+        await self._commit()  # ijara saqlansin; Telegram so'rovi tranzaksiyadan tashqarida
         # Telegram web_app tugmasi faqat https bilan ishlaydi (local'da tugmasiz)
         button = (
             (BUTTON.get(message.locale, BUTTON["ru"]), self._base + message.path)

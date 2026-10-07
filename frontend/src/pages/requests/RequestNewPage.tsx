@@ -7,18 +7,13 @@ import { REQUESTS_KEY, requestsApi, type RequestType } from '@/entities/purchase
 import { meQuery } from '@/entities/user'
 import { describeError } from '@/shared/api/errors'
 import { useI18n } from '@/shared/i18n'
-import { useZk } from '@/shared/i18n/use-zk'
+import { todayIso, useZk } from '@/shared/i18n/use-zk'
 import { Banner, Btn, Field, PageHead, Picker, Section, Seg, Textarea, TotalLine, toast, usePageActions } from '@/shared/kit'
 import { AddProductSheet, type PickedProduct } from './AddProductSheet'
+import { L } from './i18n'
 import { packInfo, parseQty, qtyBody } from './labels'
 
 const CREATOR_ROLES = new Set(['initiator', 'buyer', 'admin'])
-
-const isoDate = (offsetDays: number) => {
-  const date = new Date()
-  date.setDate(date.getDate() + offsetDays)
-  return date.toLocaleDateString('sv-SE') // YYYY-MM-DD, mahalliy sana
-}
 
 type Need = '0' | '1' | '2'
 
@@ -27,7 +22,7 @@ interface DraftLine extends PickedProduct {
 }
 
 export default function RequestNewPage() {
-  const { z, f } = useZk()
+  const { z, f, locale } = useZk()
   const { t } = useI18n()
   const navigate = useNavigate()
   const queryClient = useQueryClient()
@@ -57,21 +52,22 @@ export default function RequestNewPage() {
     mutationFn: async (submit: boolean) => {
       const { id } = await requestsApi.create({
         store_id: store,
-        needed_by: isoDate(Number(need)),
+        needed_by: todayIso(Number(need)), // Toshkent sanasi (qurilma soat mintaqasi emas)
         type,
         comment: comment.trim() || null,
       })
       try {
         for (const l of lines) await requestsApi.addLine(id, { product_id: l.product.id, qty: qtyBody(l.qty), note: null })
         if (submit) await requestsApi.submit(id)
-      } catch {
-        // Zayavka yaratildi, lekin keyingi qadam o'tmadi — qoralama sahifasida davom etiladi
-        return { id, submitted: false, partial: true }
+      } catch (error) {
+        // Zayavka yaratildi, lekin keyingi qadam o'tmadi — qoralama sahifasida davom etiladi, xato ko'rsatiladi
+        return { id, submitted: false, failure: error }
       }
-      return { id, submitted: submit, partial: false }
+      return { id, submitted: submit, failure: null }
     },
-    onSuccess: async ({ id, submitted, partial }) => {
-      if (!partial) toast(submitted ? z.toast_submitted : z.toast_draft)
+    onSuccess: async ({ id, submitted, failure }) => {
+      if (failure) toast(`${L[locale].partial_fail}: ${describeError(failure, t)}`, { error: true })
+      else toast(submitted ? z.toast_submitted : z.toast_draft)
       await queryClient.invalidateQueries({ queryKey: REQUESTS_KEY })
       void navigate({ to: '/requests/$requestId', params: { requestId: id }, replace: true })
     },
@@ -81,20 +77,22 @@ export default function RequestNewPage() {
     primary: {
       label: z.a_create_submit,
       onClick: () => create.mutate(true),
-      disabled: !store || !lines.length || lines.some((l) => !l.offer),
+      // Bir marta: so'rov ketayotganda ikkala tugma ham o'chiq (ikki marta yaratilmasin)
+      disabled: !store || !lines.length || lines.some((l) => !l.offer) || create.isPending,
       loading: create.isPending && create.variables,
     },
     secondary: {
       label: z.a_save_draft,
       onClick: () => create.mutate(false),
       disabled: !store || create.isPending,
+      loading: create.isPending && !create.variables,
     },
   })
 
   const needOptions: Array<{ value: Need; label: string }> = [
     { value: '0', label: z.today_l },
     { value: '1', label: z.tomorrow_l },
-    { value: '2', label: f.dt(isoDate(2)) },
+    { value: '2', label: f.dt(todayIso(2)) },
   ]
 
   return (

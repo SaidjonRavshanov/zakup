@@ -48,6 +48,11 @@ class Principal:
         if not self.has_role(*roles, store_id=store_id):
             raise PermissionDeniedError("auth.role_required")
 
+    def require_global(self, *roles: Role) -> None:
+        """Rol barcha omborlarga berilgan bo'lishi shart (masalan, xodimlar va rollarni boshqarish)."""
+        if not any(grant.role in roles and grant.store_id is None for grant in self.grants):
+            raise PermissionDeniedError("auth.role_required")
+
     @property
     def roles(self) -> frozenset[Role]:
         return frozenset(grant.role for grant in self.grants)

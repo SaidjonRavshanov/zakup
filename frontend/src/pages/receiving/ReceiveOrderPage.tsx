@@ -2,14 +2,16 @@ import { useQuery } from '@tanstack/react-query'
 import { useNavigate, useParams } from '@tanstack/react-router'
 import { Camera, ChevronDown, ChevronUp, Info, WifiOff } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
-import { purchaseOrdersQuery } from '@/entities/purchase-order'
+import { RECEIVABLE_STATUSES, purchaseOrdersQuery } from '@/entities/purchase-order'
 import { expectedOrderQuery, type ExpectedLine, type PaymentMethod } from '@/entities/receipt'
 import type { UnitCode } from '@/shared/i18n/keys'
 import { useZk } from '@/shared/i18n/use-zk'
 import { Banner, Blueprint, Btn, DropZone, Empty, Field, Input, Seg, Sheet, Skeleton, Stepper, Tag, toast, usePageActions } from '@/shared/kit'
+import { parseDecimal } from '@/shared/lib/format'
 import { compressImage } from '@/shared/lib/image'
 import { uuid7 } from '@/shared/lib/uuid7'
 import { enqueueReceipt } from '@/shared/offline/outbox'
+import { L } from './i18n'
 import { useOnline } from './use-online'
 
 // Ekrandagi ogohlantirish uchun; haqiqiy qaror — backend dopusklari (ZAKUP_RECEIVING_*)
@@ -25,11 +27,40 @@ interface LineFact {
   open: boolean
 }
 
-const parse = (raw: string) => {
-  const v = Number(raw.replace(/\s/g, '').replace(',', '.').replace(/[^\d.]/g, ''))
-  return Number.isFinite(v) ? v : 0
+/** Manfiy bo'lmagan son yoki null (noto'g'ri kiritilgan). */
+const parse = (raw: string): number | null => {
+  const v = parseDecimal(raw)
+  return v !== null && v >= 0 ? v : null
 }
 const raw = (value: number) => String(value).replace('.', ',')
+/** Backend uchun: miqdor — 4, pul — 2 kasrgacha (float qoldiqlarisiz). */
+const dec = (value: number, digits: 2 | 4) => String(Number(value.toFixed(digits)))
+
+/** Kiritilgan ma'lumotlar qoralamasi (sessionStorage): sahifa yopilsa / qayta ochilsa yo'qolmasin. Foto saqlanmaydi. */
+interface Draft {
+  facts: Record<string, LineFact>
+  invoiceNo: string
+  method: PaymentMethod
+}
+const draftKey = (orderId: string) => `zakup.receive.${orderId}`
+
+function readDraft(orderId: string): Draft | null {
+  try {
+    const text = sessionStorage.getItem(draftKey(orderId))
+    return text ? (JSON.parse(text) as Draft) : null
+  } catch {
+    return null
+  }
+}
+
+function writeDraft(orderId: string, draft: Draft | null): void {
+  try {
+    if (draft) sessionStorage.setItem(draftKey(orderId), JSON.stringify(draft))
+    else sessionStorage.removeItem(draftKey(orderId))
+  } catch {
+    /* saqlab bo'lmasa — faqat xotirada */
+  }
+}
 
 export default function ReceiveOrderPage() {
   const { orderId } = useParams({ from: '/shell/receiving/$orderId' })
@@ -49,38 +80,56 @@ export default function ReceiveOrderPage() {
 }
 
 function ReceiveForm({ orderId, number, lines }: { orderId: string; number: string; lines: ExpectedLine[] }) {
-  const { z, f } = useZk()
+  const { z, f, locale } = useZk()
   const navigate = useNavigate()
   const online = useOnline()
-  // Sarlavha uchun (oflayn bo'lsa keshdagi ro'yxatdan)
-  const { data: po } = useQuery({ ...purchaseOrdersQuery(), select: (list) => list.find((o) => o.id === orderId) })
+  // Sarlavha uchun (oflayn bo'lsa keshdagi qabul ro'yxatidan)
+  const { data: po } = useQuery({ ...purchaseOrdersQuery(RECEIVABLE_STATUSES), select: (list) => list.find((o) => o.id === orderId) })
   // ID bir marta yaratiladi: qayta yuborish (oflayn navbat) shu ID bilan — dublikat bo'lmaydi
   const [receiptId] = useState(uuid7)
-  const [facts, setFacts] = useState<Record<string, LineFact>>({})
+  const [restored] = useState(() => readDraft(orderId))
+  const [facts, setFacts] = useState<Record<string, LineFact>>(restored?.facts ?? {})
   const [photo, setPhoto] = useState<Blob | null>(null)
   const [photoName, setPhotoName] = useState('')
   const [preview, setPreview] = useState<string | null>(null)
   const [photoOpen, setPhotoOpen] = useState(false)
-  const [invoiceNo, setInvoiceNo] = useState('')
-  const [method, setMethod] = useState<PaymentMethod>('transfer')
+  const [invoiceNo, setInvoiceNo] = useState(restored?.invoiceNo ?? '')
+  const [method, setMethod] = useState<PaymentMethod>(restored?.method ?? 'transfer')
   const [saving, setSaving] = useState(false)
+  const [saveError, setSaveError] = useState<string | null>(null)
+  const finished = useRef(false)
+
+  // Har o'zgarishda qoralama saqlanadi (yakunlangandan keyin — yo'q)
+  useEffect(() => {
+    if (finished.current) return
+    const empty = Object.keys(facts).length === 0 && !invoiceNo && method === 'transfer'
+    writeDraft(orderId, empty ? null : { facts, invoiceNo, method })
+  }, [orderId, facts, invoiceNo, method])
   const fileRef = useRef<HTMLInputElement>(null)
 
   const factOf = (line: ExpectedLine): LineFact =>
     facts[line.order_line_id] ?? { qty: raw(Number(line.qty)), price: raw(Number(line.price)), defect: '0', reason: '', open: false }
   const update = (line: ExpectedLine, patch: Partial<LineFact>) =>
     setFacts((prev) => ({ ...prev, [line.order_line_id]: { ...factOf(line), ...patch } }))
-  /** Raqamlar: brak — qabul qilingan miqdordan oshmaydi. */
-  const numbers = (line: ExpectedLine) => {
+  /** Raqamlar (noto'g'ri bo'lsa — null): brak — qabul qilingan miqdordan oshmaydi. */
+  const parsed = (line: ExpectedLine) => {
     const fact = factOf(line)
     const qty = parse(fact.qty)
-    return { qty, price: parse(fact.price), defect: Math.min(parse(fact.defect), qty) }
+    const defect = parse(fact.defect)
+    return { qty, price: parse(fact.price), defect: defect === null || qty === null ? defect : Math.min(defect, qty) }
+  }
+  const isBad = (line: ExpectedLine) => Object.values(parsed(line)).some((v) => v === null)
+  /** Ekrandagi hisob uchun: noto'g'ri qiymat — 0. */
+  const numbers = (line: ExpectedLine) => {
+    const p = parsed(line)
+    return { qty: p.qty ?? 0, price: p.price ?? 0, defect: p.defect ?? 0 }
   }
 
   const total = lines.reduce((sum, line) => {
     const n = numbers(line)
     return sum + Math.max(n.qty - n.defect, 0) * n.price
   }, 0)
+  const badNumbers = lines.some(isBad)
   const ordered = lines.reduce((sum, line) => sum + Number(line.qty) * Number(line.price), 0)
   const needsReason = (line: ExpectedLine) => numbers(line).defect > 0 && !factOf(line).reason.trim()
   const defectWithoutReason = lines.some(needsReason)
@@ -98,8 +147,9 @@ function ReceiveForm({ orderId, number, lines }: { orderId: string; number: stri
   }
 
   const complete = async () => {
-    if (!photo) return
+    if (!photo || badNumbers || defectWithoutReason) return
     setSaving(true)
+    setSaveError(null)
     try {
       await enqueueReceipt({
         id: receiptId,
@@ -116,23 +166,34 @@ function ReceiveForm({ orderId, number, lines }: { orderId: string; number: stri
             const n = numbers(line)
             return {
               order_line_id: line.order_line_id,
-              qty: String(n.qty),
-              price: String(n.price),
-              qty_defect: String(n.defect),
+              qty: dec(n.qty, 4),
+              price: dec(n.price, 2),
+              qty_defect: dec(n.defect, 4),
               defect_reason: factOf(line).reason.trim() || null,
             }
           }),
         },
       })
+    } catch (error) {
+      // IndexedDB yo'q / joy tugagan — ma'lumot qoralamada qoladi, foydalanuvchi ko'radi
+      setSaveError(`${L[locale].save_failed}: ${error instanceof Error ? error.message : String(error)}`)
+      return
     } finally {
       setSaving(false)
     }
+    finished.current = true
+    writeDraft(orderId, null)
     toast(z.toast_recv_saved)
     void navigate({ to: '/receiving', replace: true })
   }
 
   usePageActions({
-    primary: { label: z.a_finish, onClick: () => void complete(), disabled: !photo || defectWithoutReason, loading: saving },
+    primary: {
+      label: z.a_finish,
+      onClick: () => void complete(),
+      disabled: !photo || defectWithoutReason || badNumbers,
+      loading: saving,
+    },
   })
 
   return (
@@ -147,6 +208,7 @@ function ReceiveForm({ orderId, number, lines }: { orderId: string; number: stri
           {z.offline_recv}
         </Banner>
       )}
+      {restored && !photo && <Banner tone="info">{L[locale].draft_restored}</Banner>}
 
       <div className="mt-5 flex flex-col gap-5">
         {lines.map((line) => {
@@ -160,6 +222,7 @@ function ReceiveForm({ orderId, number, lines }: { orderId: string; number: stri
           const out = Math.abs(dev) > tol + 1e-9
           const needR = needsReason(line)
           const priceUp = n.price > Number(line.price)
+          const p = parsed(line)
           const extra =
             (n.defect > 0 ? `${needR ? z.need_reason_short : `${z.defect} ${f.qty(n.defect, line.base_unit)}`} · ` : '') +
             `${f.money(n.price)} / ${unit}`
@@ -181,6 +244,7 @@ function ReceiveForm({ orderId, number, lines }: { orderId: string; number: stri
                 unit={unit}
                 onChange={(qty) => update(line, { qty })}
               />
+              {p.qty === null && <div className="mt-1 text-[13px] text-danger">{L[locale].bad_number_short}</div>}
               <button
                 type="button"
                 onClick={() => update(line, { open: !fact.open })}
@@ -196,10 +260,10 @@ function ReceiveForm({ orderId, number, lines }: { orderId: string; number: stri
                 <>
                   <div className="grid grid-cols-2 gap-2.5">
                     <Field label={`${z.price_per} ${unit}`}>
-                      <Input inputMode="decimal" value={fact.price} onChange={(e) => update(line, { price: e.target.value })} />
+                      <Input inputMode="decimal" value={fact.price} invalid={p.price === null} onChange={(e) => update(line, { price: e.target.value })} />
                     </Field>
                     <Field label={`${z.defect}, ${unit}`}>
-                      <Input inputMode="decimal" value={fact.defect} onChange={(e) => update(line, { defect: e.target.value })} />
+                      <Input inputMode="decimal" value={fact.defect} invalid={p.defect === null} onChange={(e) => update(line, { defect: e.target.value })} />
                     </Field>
                   </div>
                   <Field label={z.defect_reason} className="mt-2.5">
@@ -271,12 +335,13 @@ function ReceiveForm({ orderId, number, lines }: { orderId: string; number: stri
         </span>
       </div>
       <div className="text-right text-[13px] text-n7">{`${z.ordered}: ${f.money(ordered)}`}</div>
-      {(!photo || defectWithoutReason) && (
+      {(!photo || defectWithoutReason || badNumbers) && (
         <div className="mt-2.5 flex items-center gap-2 text-[14px] text-warn">
-          <Info size={20} />
-          {!photo ? z.need_photo : z.need_reason}
+          <Info size={20} className="shrink-0" />
+          {badNumbers ? L[locale].bad_number : !photo ? z.need_photo : z.need_reason}
         </div>
       )}
+      {saveError && <Banner tone="danger">{saveError}</Banner>}
 
       <Sheet open={photoOpen} title={invoiceNo.trim() ? `${z.invoice} ${invoiceNo.trim()}` : z.invoice_photo} onClose={() => setPhotoOpen(false)}>
         {preview && <img src={preview} alt={z.invoice_photo} className="w-full border border-line" />}

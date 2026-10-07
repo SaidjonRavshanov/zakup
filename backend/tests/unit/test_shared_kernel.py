@@ -1,7 +1,10 @@
 from decimal import Decimal
+from uuid import uuid4
 
 import pytest
 
+from zakup.shared_kernel.auth import Principal, Role, RoleGrant
+from zakup.shared_kernel.errors import PermissionDeniedError
 from zakup.shared_kernel.ids import uuid7
 from zakup.shared_kernel.money import CurrencyMismatchError, Money, Quantity
 
@@ -34,3 +37,11 @@ def test_money_currency_mismatch() -> None:
 )
 def test_quantity_deviation(expected: str, actual: str, pct: str) -> None:
     assert Quantity(Decimal(actual), "kg").deviation_pct(Quantity(Decimal(expected), "kg")) == Decimal(pct)
+
+
+def test_require_global_rejects_store_scoped_admin() -> None:
+    scoped = Principal(user_id=uuid4(), grants=frozenset({RoleGrant(Role.ADMIN, uuid4())}))
+    scoped.require(Role.ADMIN)  # oddiy tekshiruv o'tadi ("qaysidir omborda")
+    with pytest.raises(PermissionDeniedError):
+        scoped.require_global(Role.ADMIN)
+    Principal(user_id=uuid4(), grants=frozenset({RoleGrant(Role.ADMIN, None)})).require_global(Role.ADMIN)

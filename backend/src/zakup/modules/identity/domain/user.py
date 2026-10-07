@@ -16,7 +16,7 @@ from zakup.shared_kernel.ids import new_id
 
 Locale = Literal["uz", "ru"]
 DEFAULT_LOCALE: Locale = "uz"
-MAX_GRANTS = 50
+MAX_GRANTS = 1000  # rol x ombor: 100+ ombor (Tarnov) — har biri alohida grant
 
 
 def normalize_locale(language_code: str | None) -> Locale:
@@ -146,6 +146,9 @@ class User(AggregateRoot):
     def set_grants(self, grants: frozenset[RoleGrant], actor: Principal) -> None:
         if len(grants) > MAX_GRANTS:
             raise InvalidUserError("user.too_many_grants", max=MAX_GRANTS)
+        # Admin — faqat barcha omborlarga (bitta omborli "admin" xodimlar va rollarni boshqara olmaydi)
+        if any(g.role is Role.ADMIN and g.store_id is not None for g in grants):
+            raise InvalidUserError("user.admin_must_be_global")
         if actor.user_id == self.id and not any(g.role is Role.ADMIN for g in grants):
             raise SelfLockoutError("user.self_remove_admin")
         if grants == self.grants:

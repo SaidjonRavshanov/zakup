@@ -6,12 +6,23 @@ import { FINANCE_KEY, paymentsApi, paymentsQuery, supplierAccountQuery, type Obl
 import { useHasRole } from '@/entities/user'
 import { describeError } from '@/shared/api/errors'
 import { useI18n } from '@/shared/i18n'
+import { parseDecimal } from '@/shared/lib/format'
 import { useZk } from '@/shared/i18n/use-zk'
 import { Banner, Blueprint, Check, Empty, Field, Input, RowsSkeleton, Section, Seg, Tag, status, toast, usePageActions } from '@/shared/kit'
 
-/** To'lash mumkin bo'lgan qoldiq: boshqa faol zayavkalarda band summa ayirib tashlanadi. */
-const payable = (o: Obligation) => (o.status === 'BLOCKED' ? 0 : Math.max(Number(o.outstanding) - Number(o.reserved), 0))
-const decimal = (value: string) => value.replace(/\s/g, '').replace(',', '.').replace(/[^\d.]/g, '')
+/** Pul tiyinlarda (butun son) — 100000.2 - 0.1 kabi float qoldiqlari bo'lmasin. */
+const tiyin = (value: string | number) => Math.round(Number(value) * 100)
+/** To'lash mumkin bo'lgan qoldiq (tiyin): boshqa faol zayavkalarda band summa ayirib tashlanadi. */
+const payableTiyin = (o: Obligation) => (o.status === 'BLOCKED' ? 0 : Math.max(tiyin(o.outstanding) - tiyin(o.reserved), 0))
+/** Kiritilgan summa → tiyin; noto'g'ri yoki 2 kasrdan ortiq — null. */
+const amountTiyin = (raw: string): number | null => {
+  const value = parseDecimal(raw)
+  if (value === null || value < 0) return null
+  const t = Math.round(value * 100)
+  return Math.abs(value * 100 - t) < 1e-6 ? t : null
+}
+/** Tiyin → backend summasi ("100000.19"). */
+const fromTiyin = (t: number) => String(t / 100)
 
 export default function SupplierAccountPage() {
   const { supplierId } = useParams({ from: '/shell/finance/suppliers/$supplierId' })
@@ -33,7 +44,7 @@ export default function SupplierAccountPage() {
         supplier_id: supplierId,
         method,
         comment: comment.trim() || undefined,
-        lines: Object.entries(selected).map(([obligation_id, amount]) => ({ obligation_id, amount: decimal(amount) })),
+        lines: Object.entries(selected).map(([obligation_id, amount]) => ({ obligation_id, amount: fromTiyin(amountTiyin(amount) ?? 0) })),
       }),
     onSuccess: async ({ id }) => {
       toast(z.toast_pay_created)
@@ -45,11 +56,14 @@ export default function SupplierAccountPage() {
 
   const obligations = account?.obligations ?? []
   const ids = Object.keys(selected)
-  const total = Object.values(selected).reduce((sum, amount) => sum + (Number(decimal(amount)) || 0), 0)
+  const total = Object.values(selected).reduce((sum, amount) => sum + (amountTiyin(amount) ?? 0), 0) / 100
+  const badAmount = (o: Obligation, amount: string) => {
+    const value = amountTiyin(amount)
+    return value === null || value <= 0 || value > payableTiyin(o)
+  }
   const invalid = Object.entries(selected).some(([id, amount]) => {
-    const value = Number(decimal(amount))
     const obligation = obligations.find((o) => o.id === id)
-    return !obligation || !(value > 0) || value > payable(obligation)
+    return !obligation || badAmount(obligation, amount)
   })
 
   usePageActions({
@@ -67,7 +81,7 @@ export default function SupplierAccountPage() {
     setSelected((prev) => {
       const next = { ...prev }
       if (o.id in next) delete next[o.id]
-      else next[o.id] = String(payable(o))
+      else next[o.id] = fromTiyin(payableTiyin(o))
       return next
     })
   const methodLabel = (m: PaymentMethod, short = false) =>
@@ -109,7 +123,7 @@ export default function SupplierAccountPage() {
       {obligations.map((o) => {
         const isSelected = o.id in selected
         const locked = o.status === 'BLOCKED'
-        const canSel = canPay && !locked && payable(o) > 0
+        const canSel = canPay && !locked && payableTiyin(o) > 0
         const s = status(z, 'invoice', o.overdue ? 'OVERDUE' : o.status)
         const extra = [
           Number(o.paid) > 0 ? `${z.paid_l} ${f.money(o.paid)}` : '',
@@ -147,7 +161,7 @@ export default function SupplierAccountPage() {
                   <Input
                     inputMode="decimal"
                     value={selected[o.id]}
-                    invalid={!(Number(decimal(selected[o.id] ?? '')) > 0) || Number(decimal(selected[o.id] ?? '')) > payable(o)}
+                    invalid={badAmount(o, selected[o.id] ?? '')}
                     onChange={(e) => setSelected((prev) => ({ ...prev, [o.id]: e.target.value }))}
                   />
                 </Field>

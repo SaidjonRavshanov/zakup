@@ -159,7 +159,7 @@ function Suppliers() {
                   <span className="whitespace-nowrap text-[14px]">{`${f.cmp(s.amount)} ${z.sum}`}</span>
                 </div>
                 <div className="text-[13px] text-n7">
-                  {`${s.orders} ${z.orders_n} · ${s.receipts} ${z.receipts_n} · ${z.resp_time} ${resp(s)}`}
+                  {`${f.cnt(s.orders, 'orders_n')} · ${f.cnt(s.receipts, 'receipts_n')} · ${z.resp_time} ${resp(s)}`}
                 </div>
                 {s.receipts > 0 && (
                   <div className="mt-1.5 grid grid-cols-4 gap-1.5">
@@ -337,7 +337,9 @@ function Control() {
     <div className="mt-1">
       {data.items.map((item) => {
         const detail = item.detail ? controlDetail(item, t) : ''
-        const who = [f.dtTime(item.at), item.amount !== null ? f.money(item.amount) : null].filter(Boolean).join(' · ')
+        // `at` — ba'zan faqat sana (YYYY-MM-DD): vaqtsiz ko'rsatiladi
+        const when = /^\d{4}-\d{2}-\d{2}$/.test(item.at) ? f.dt(item.at) : f.dtTime(item.at)
+        const who = [when, item.amount !== null ? f.money(item.amount) : null].filter(Boolean).join(' · ')
         return (
           <button
             key={`${item.kind}-${item.entity_id}`}

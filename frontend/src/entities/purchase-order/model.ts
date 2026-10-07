@@ -59,6 +59,6 @@ export type OrderFilter = 'all' | 'awaiting' | 'in_transit' | 'done'
 export const ORDER_FILTERS: Record<OrderFilter, ReadonlyArray<PurchaseOrderStatus> | null> = {
   all: null,
   awaiting: ['CREATED', 'SENT'],
-  in_transit: ['CONFIRMED', 'PARTIALLY_CONFIRMED', 'REAPPROVAL', 'RECEIVING'],
-  done: ['RECEIVED', 'PARTIALLY_RECEIVED', 'CLOSED', 'CANCELLED'],
+  in_transit: ['CONFIRMED', 'PARTIALLY_CONFIRMED', 'REAPPROVAL'],
+  done: ['RECEIVED', 'PARTIALLY_RECEIVED', 'CANCELLED'],
 }

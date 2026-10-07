@@ -32,6 +32,10 @@ interface TgWebApp {
   /** Bot API 8.0: to'liq ekran (Telegram Desktop'da — butun oyna/monitor). */
   requestFullscreen?(): void
   isFullscreen?: boolean
+  /** t.me havolalari — Telegram ichida (ilova yopilmaydi). */
+  openTelegramLink?(url: string): void
+  /** Tashqi havola — tizim brauzerida. */
+  openLink?(url: string): void
   onEvent(event: 'themeChanged', cb: () => void): void
   offEvent(event: 'themeChanged', cb: () => void): void
   BackButton: TgButton
@@ -94,6 +98,19 @@ export const telegram = {
     if (!isInTelegram || !webApp) return () => {}
     webApp.onEvent('themeChanged', cb)
     return () => webApp.offEvent('themeChanged', cb)
+  },
+
+  /** Havolani ochish: Telegram ichida — uning API'si orqali (WebView'da target=_blank ishlamasligi mumkin). */
+  openLink(url: string): void {
+    if (isInTelegram && webApp) {
+      try {
+        if (/^https:\/\/t\.me\//.test(url) && webApp.openTelegramLink) return webApp.openTelegramLink(url)
+        if (webApp.openLink) return webApp.openLink(url)
+      } catch {
+        /* eski klient — oddiy usul */
+      }
+    }
+    window.open(url, '_blank', 'noopener,noreferrer')
   },
 
   backButton(cb: (() => void) | null): () => void {

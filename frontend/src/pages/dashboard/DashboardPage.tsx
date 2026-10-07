@@ -3,8 +3,8 @@ import { useQuery } from '@tanstack/react-query'
 import { useNavigate } from '@tanstack/react-router'
 import { ChartLine, ChevronRight, Plus } from 'lucide-react'
 import { summaryQuery } from '@/entities/analytics'
-import { purchaseOrdersQuery } from '@/entities/purchase-order'
-import { requestsQuery } from '@/entities/purchase-request'
+import { OPEN_STATUSES, purchaseOrdersQuery } from '@/entities/purchase-order'
+import { OPEN_REQUEST_STATUSES, requestsByStatusQuery } from '@/entities/purchase-request'
 import { meQuery, useActiveRole, useHasRole } from '@/entities/user'
 import { TodoList, useTodo } from '@/features/todo'
 import { healthQuery } from '@/shared/api/health'
@@ -36,8 +36,8 @@ export default function DashboardPage() {
 
   const health = useQuery(healthQuery)
   const { data: summary } = useQuery({ ...summaryQuery, enabled: full })
-  const { data: orders, isPending } = useQuery({ ...purchaseOrdersQuery(), enabled: role !== 'initiator' })
-  const { data: requests } = useQuery({ ...requestsQuery, enabled: role === 'initiator' })
+  const { data: orders, isPending } = useQuery({ ...purchaseOrdersQuery(OPEN_STATUSES), enabled: role !== 'initiator' })
+  const { data: requests } = useQuery({ ...requestsByStatusQuery(OPEN_REQUEST_STATUSES), enabled: role === 'initiator' })
   const { items: todo } = useTodo()
   const queue = usePendingReceipts()
 
@@ -55,13 +55,13 @@ export default function DashboardPage() {
     hero = {
       label: z.month_buy,
       value: summary ? f.cmp(summary.purchases) : '—',
-      sub: summary ? `${summary.receipts} ${z.receipts_n}` : '',
+      sub: summary ? f.cnt(summary.receipts, 'receipts_n') : '',
       delta: delta === null ? '' : `${f.pct(delta)} ${z.vs_prev}`,
     }
   } else if (role === 'initiator') {
     const drafts = mine.filter((r) => r.status === 'DRAFT').length
     const pending = mine.filter((r) => r.status === 'PENDING_APPROVAL').length
-    hero = { label: z.my_reqs, value: String(drafts + pending), sub: `${drafts} ${z.drafts_n} · ${pending} ${z.pending_n}` }
+    hero = { label: z.my_reqs, value: String(drafts + pending), sub: `${f.cnt(drafts, 'drafts_n')} · ${pending} ${z.pending_n}` }
   } else {
     hero = {
       label: z.deliveries_today,

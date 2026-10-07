@@ -2,7 +2,7 @@
  * Ustki qatlamlar komponentlari: pastdan chiqadigan panel (sheet), tasdiqlash oynasi, toast va sahifa amallari paneli.
  * Holat va chaqiriladigan funksiyalar — overlay-state.ts (confirmAction, toast, usePageActions).
  */
-import { Check as CheckIcon, X } from 'lucide-react'
+import { Check as CheckIcon, TriangleAlert, X } from 'lucide-react'
 import { useEffect, useRef, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import { actionsStore, confirmStore, toastStore } from './overlay-state'
@@ -90,16 +90,17 @@ export function ToastHost() {
   return createPortal(
     <div
       key={t.id}
-      role="status"
+      role={t.error ? 'alert' : 'status'}
       className="fixed left-1/2 top-3 z-[60] flex w-max max-w-[90%] -translate-x-1/2 items-center gap-2 bg-ink px-3.5 py-2.5 text-[14px] text-ground"
       style={{
+        ...(t.error ? { background: 'var(--zk-danger)', color: '#fff' } : null),
         boxShadow: 'var(--shadow-md)',
         animation: 'zkFade .15s ease-out',
         // Telegram to'liq ekranida uning tugmalari ostida
         marginTop: 'calc(env(safe-area-inset-top) + var(--tg-safe-area-inset-top, 0px) + var(--tg-content-safe-area-inset-top, 0px))',
       }}
     >
-      <CheckIcon size={20} />
+      {t.error ? <TriangleAlert size={20} className="shrink-0" /> : <CheckIcon size={20} className="shrink-0" />}
       <span>{t.text}</span>
     </div>,
     document.body,

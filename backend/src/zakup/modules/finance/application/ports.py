@@ -57,10 +57,17 @@ class FinanceReader(Protocol):
     ) -> list[ObligationView]: ...
 
     async def payments(
-        self, *, statuses: set[PaymentStatus] | None, supplier_id: UUID | None, limit: int
-    ) -> list[PaymentListItem]: ...
+        self,
+        *,
+        statuses: set[PaymentStatus] | None,
+        supplier_id: UUID | None,
+        limit: int,
+        store_ids: set[UUID] | None = None,
+    ) -> list[PaymentListItem]:
+        """store_ids — faqat shu omborlar nakladnoylari bor zayavkalar (None — hammasi)."""
+        ...
 
-    async def payment(self, payment_id: UUID) -> PaymentDetail | None: ...
+    async def payment(self, payment_id: UUID, store_ids: set[UUID] | None = None) -> PaymentDetail | None: ...
 
 
 class StoredFile(Protocol):

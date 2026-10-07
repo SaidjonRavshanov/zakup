@@ -33,6 +33,11 @@ export function setSessionRenewer(renewer: SessionRenewer): void {
   renewSession = renewer
 }
 
+/** 401 dan keyin sessiyani tiklash (apiRequest'dan tashqari fetch'lar uchun: fayllar). true — qayta urinish mumkin. */
+export function refreshSession(): Promise<boolean> {
+  return renewSession()
+}
+
 async function send(path: string, options: RequestOptions): Promise<Response> {
   // Accept-Language: backend xabarlari (bildirishnoma, PDF) foydalanuvchi tilida bo'lishi uchun
   const headers: Record<string, string> = { Accept: 'application/json', 'Accept-Language': getLocale() }

@@ -41,8 +41,13 @@ class RequestRepository(Protocol):
 class OrderRepository(Protocol):
     async def next_number(self) -> str: ...
 
-    async def in_transit(self, store_id: UUID, product_ids: Iterable[UUID]) -> dict[UUID, Decimal]:
-        """Yo'lda: yuborilgan / tasdiqlangan, hali qabul qilinmagan buyurtmalar (bazaviy birlikda)."""
+    async def in_transit(
+        self, store_id: UUID, product_ids: Iterable[UUID], received_after: datetime | None = None
+    ) -> dict[UUID, Decimal]:
+        """Yo'lda: yuborilgan / tasdiqlangan, hali qabul qilinmagan buyurtmalar (bazaviy birlikda).
+
+        `received_after` — qoldiq snapshot vaqti: undan keyin qabul qilinganlar ham "yo'lda" (iiko qoldig'ida
+        hali yo'q — aks holda ertalabki avto-zayavka kelgan tovarni yana buyuradi)."""
 
     async def get(self, order_id: UUID) -> PurchaseOrder | None: ...
 

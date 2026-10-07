@@ -8,7 +8,7 @@ from decimal import Decimal
 from typing import Any
 from uuid import UUID
 
-from sqlalchemy import Table, delete, func, insert, select, update
+from sqlalchemy import ColumnElement, Table, delete, func, insert, select, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -304,17 +304,26 @@ class SqlOrderRepository:
     def __init__(self, session: AsyncSession) -> None:
         self._session = session
 
-    async def in_transit(self, store_id: UUID, product_ids: Iterable[UUID]) -> dict[UUID, Decimal]:
+    async def in_transit(
+        self, store_id: UUID, product_ids: Iterable[UUID], received_after: datetime | None = None
+    ) -> dict[UUID, Decimal]:
         ids = list(product_ids)
         if not ids:
             return {}
         packs = func.coalesce(purchase_order_lines.c.qty_confirmed, purchase_order_lines.c.qty_packs)
+        pending: ColumnElement[bool] = purchase_orders.c.status.in_([s.value for s in IN_TRANSIT])
+        if received_after is not None:
+            # Qoldiq snapshot'idan keyin qabul qilingan — omborda bor, lekin iiko qoldig'ida hali yo'q
+            pending = pending | (
+                purchase_orders.c.status.in_([OrderStatus.RECEIVED.value, OrderStatus.PARTIALLY_RECEIVED.value])
+                & (purchase_orders.c.updated_at > received_after)
+            )
         query = (
             select(purchase_order_lines.c.product_id, func.sum(packs * purchase_order_lines.c.pack_factor))
             .join(purchase_orders, purchase_orders.c.id == purchase_order_lines.c.order_id)
             .where(
                 purchase_orders.c.store_id == store_id,
-                purchase_orders.c.status.in_([s.value for s in IN_TRANSIT]),
+                pending,
                 purchase_order_lines.c.product_id.in_(ids),
                 # javob "yo'q" (out_of_stock) — kelmaydi
                 func.coalesce(purchase_order_lines.c.qty_confirmed, 1) > 0,

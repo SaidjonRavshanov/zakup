@@ -1,41 +1,28 @@
-import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { useQuery } from '@tanstack/react-query'
 import { useNavigate } from '@tanstack/react-router'
 import { Clock, WifiOff } from 'lucide-react'
-import { useEffect, useState } from 'react'
-import { ORDERS_KEY, purchaseOrdersQuery, type PurchaseOrderStatus } from '@/entities/purchase-order'
-import { RECEIPTS_KEY, receiptsQuery } from '@/entities/receipt'
+import { useState } from 'react'
+import { RECEIVABLE_STATUSES, purchaseOrdersQuery } from '@/entities/purchase-order'
+import { receiptsQuery } from '@/entities/receipt'
 import { useZk } from '@/shared/i18n/use-zk'
-import { Blueprint, Btn, Empty, Row, RowsSkeleton, Seg, Tag, confirmAction, status, toast } from '@/shared/kit'
-import { discardReceipt, flush, onReceiptSent, retryReceipt, usePendingReceipts } from '@/shared/offline/outbox'
+import { Blueprint, Btn, Empty, Row, RowsSkeleton, Seg, Tag, confirmAction, status } from '@/shared/kit'
+import { discardReceipt, flush, retryReceipt, usePendingReceipts } from '@/shared/offline/outbox'
 import { useOnline } from './use-online'
 
-/** Tovar kelishi mumkin bo'lgan buyurtmalar (javob kelmagan bo'lsa ham). */
-const RECEIVABLE: ReadonlyArray<PurchaseOrderStatus> = ['SENT', 'CONFIRMED', 'PARTIALLY_CONFIRMED']
 type Tab = 'exp' | 'acc'
 
 export default function ReceivingListPage() {
   const navigate = useNavigate()
-  const queryClient = useQueryClient()
   const { z, f } = useZk()
   const online = useOnline()
   const [tab, setTab] = useState<Tab>('exp')
   const pending = usePendingReceipts()
-  const { data: orders = [], isPending } = useQuery(purchaseOrdersQuery())
+  // Tovar kelishi mumkin bo'lgan buyurtmalar (javob kelmagan bo'lsa ham) — server filtri bilan
+  const { data: orders = [], isPending } = useQuery(purchaseOrdersQuery(RECEIVABLE_STATUSES))
   const { data: receipts = [], isPending: receiptsPending } = useQuery(receiptsQuery)
 
-  // Navbatdagi qabul yuborilganda — ro'yxatlar yangilanadi
-  useEffect(
-    () =>
-      onReceiptSent(() => {
-        toast(z.toast_synced)
-        void queryClient.invalidateQueries({ queryKey: ORDERS_KEY })
-        void queryClient.invalidateQueries({ queryKey: RECEIPTS_KEY })
-      }),
-    [queryClient, z],
-  )
-
   const queuedOrders = new Set(pending.map((p) => p.orderId))
-  const toReceive = orders.filter((po) => RECEIVABLE.includes(po.status) && !queuedOrders.has(po.id))
+  const toReceive = orders.filter((po) => !queuedOrders.has(po.id))
   const supplierOf = (orderId: string) => orders.find((o) => o.id === orderId)?.supplierName
 
   const discard = async (id: string) => {

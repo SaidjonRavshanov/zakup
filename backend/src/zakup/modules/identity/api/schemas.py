@@ -69,4 +69,4 @@ class ChangeLocaleIn(BaseModel):
 
 
 class SetRolesIn(BaseModel):
-    grants: list[GrantSchema] = Field(max_length=50)
+    grants: list[GrantSchema] = Field(max_length=1000)

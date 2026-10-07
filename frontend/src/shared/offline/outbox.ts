@@ -91,7 +91,15 @@ export async function retryReceipt(id: string): Promise<void> {
   if (!item) return
   await tx('readwrite', (store) => store.put({ ...item, error: null, photoId: null }))
   await refresh()
+  // Yuborish ketayotgan bo'lsa, u bu yozuvni o'tkazib yuborgan bo'lishi mumkin — tugashini kutib, yana yuboramiz
+  await flushing?.catch(() => undefined)
   await flush()
+}
+
+/** Chiqishda: navbatni butunlay tozalash (boshqa foydalanuvchiga o'tmasin). */
+export async function clearOutbox(): Promise<void> {
+  await tx('readwrite', (store) => store.clear())
+  await refresh()
 }
 
 let flushing: Promise<void> | null = null
@@ -103,6 +111,22 @@ export function flush(): Promise<void> {
   })
   return flushing
 }
+
+// Osilib qolgan so'rov navbatni to'xtatib qo'ymasin (sekin tarmoqda foto yuklash uchun yetarli)
+const SEND_TIMEOUT_MS = 90_000
+
+async function withTimeout<T>(run: (signal: AbortSignal) => Promise<T>): Promise<T> {
+  const controller = new AbortController()
+  const timer = window.setTimeout(() => controller.abort(), SEND_TIMEOUT_MS)
+  try {
+    return await run(controller.signal)
+  } finally {
+    window.clearTimeout(timer)
+  }
+}
+
+/** Yozuv hali navbatdami (yuborish paytida foydalanuvchi o'chirgan bo'lishi mumkin). */
+const exists = async (id: string) => (await tx('readonly', (store) => store.getKey(id))) !== undefined
 
 const onSent = new Set<(id: string) => void>()
 
@@ -119,14 +143,18 @@ async function send(): Promise<void> {
     try {
       let photoId = item.photoId
       if (!photoId) {
-        photoId = await uploadFile('/receiving/attachments', new Blob([item.photo], { type: item.photoType }))
+        const blob = new Blob([item.photo], { type: item.photoType })
+        photoId = await withTimeout((signal) => uploadFile('/receiving/attachments', blob, { signal }))
+        if (!(await exists(item.id))) continue // o'chirilgan — qayta tiriltirmaymiz
         await tx('readwrite', (store) => store.put({ ...item, photoId }))
       }
-      await apiRequest('/receiving/receipts', { method: 'POST', body: { ...item.payload, invoice_photo_id: photoId } })
+      // captured_at — qabul telefonda rasmiylashtirilgan vaqt (oflayn bo'lsa yuborilgan vaqtdan oldin)
+      const body = { ...item.payload, invoice_photo_id: photoId, captured_at: new Date(item.createdAt).toISOString() }
+      await withTimeout((signal) => apiRequest('/receiving/receipts', { method: 'POST', body, signal }))
       await tx('readwrite', (store) => store.delete(item.id))
       onSent.forEach((listener) => listener(item.id))
     } catch (error) {
-      if (error instanceof ApiError && error.status >= 400 && error.status < 500 && error.status !== 401) {
+      if (error instanceof ApiError && error.status >= 400 && error.status < 500 && error.status !== 401 && (await exists(item.id))) {
         await tx('readwrite', (store) => store.put({ ...item, error: error.message }))
       }
       // tarmoq / 5xx / sessiya — keyingi urinishda

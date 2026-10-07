@@ -1,7 +1,7 @@
 """notifications: boshqa modullar ma'lumotini read-only SQL bilan o'qiydi (analytics kabi — kod importisiz)
 va o'z navbatini (notify.messages) yuritadi."""
 
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from typing import Any
 from uuid import UUID
 
@@ -23,6 +23,7 @@ from zakup.modules.notifications.application.ports import (
 from zakup.modules.notifications.infrastructure.tables import messages
 from zakup.shared_kernel.ids import uuid7
 
+LEASE = timedelta(minutes=5)
 _RECIPIENT = "SELECT DISTINCT u.id, u.telegram_id, u.locale FROM identity.users u"
 
 
@@ -157,9 +158,25 @@ class SqlMessageQueue:
         )
 
     async def next_pending(self, now: datetime) -> PendingMessage | None:
+        """Navbatdagi xabarni "ijaraga" oladi: next_attempt_at = now + LEASE (chaqiruvchi darhol commit qiladi).
+
+        Telegram'ga so'rov tranzaksiyadan tashqarida — ulanish band turmaydi; jarayon yiqilsa xabar ijara
+        tugagach qayta olinadi.
+        """
+        claimable = (
+            select(messages.c.id)
+            .where(messages.c.status == "pending", messages.c.next_attempt_at <= now)
+            .order_by(messages.c.created_at)
+            .limit(1)
+            .with_for_update(skip_locked=True)
+            .scalar_subquery()
+        )
         row = (
             await self._s.execute(
-                select(
+                update(messages)
+                .where(messages.c.id == claimable)
+                .values(next_attempt_at=now + LEASE)
+                .returning(
                     messages.c.id,
                     messages.c.chat_id,
                     messages.c.text,
@@ -167,10 +184,6 @@ class SqlMessageQueue:
                     messages.c.locale,
                     messages.c.attempts,
                 )
-                .where(messages.c.status == "pending", messages.c.next_attempt_at <= now)
-                .order_by(messages.c.created_at)
-                .limit(1)
-                .with_for_update(skip_locked=True)
             )
         ).first()
         if row is None:

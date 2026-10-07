@@ -19,7 +19,7 @@ export default function TodoPage() {
 
   return (
     <div>
-      <PageHead title={z.inbox} sub={`${items.length} ${z.tasks_n}${role ? ` · ${z[`r_${role}`]}` : ''}`} />
+      <PageHead title={z.inbox} sub={`${f.cnt(items.length, 'tasks_n')}${role ? ` · ${z[`r_${role}`]}` : ''}`} />
       {loading && !items.length && <RowsSkeleton n={4} />}
       {groups.map((g) => (
         <div key={g.key}>

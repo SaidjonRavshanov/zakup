@@ -1,4 +1,4 @@
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from uuid import uuid4
 
@@ -10,6 +10,7 @@ from zakup.modules.integration_iiko.infrastructure.parsers import (
     parse_incoming_invoices,
     render_incoming_invoice,
 )
+from zakup.modules.receiving.application.use_cases import _received_at
 from zakup.modules.receiving.domain.receipt import (
     DiscrepancyKind,
     ExpectedLine,
@@ -163,3 +164,11 @@ def test_invoice_xml_roundtrip() -> None:
         b"<errorMessage>No product</errorMessage></documentValidationResult>"
     )
     assert (bad.valid, bad.error) == (False, "No product")
+
+
+def test_offline_capture_time_is_bounded() -> None:
+    now = datetime(2026, 10, 8, 9, tzinfo=UTC)
+    assert _received_at(now - timedelta(hours=20), now) == now - timedelta(hours=20)  # kecha oflayn
+    assert _received_at(now + timedelta(hours=2), now) == now  # telefon soati oldinda
+    assert _received_at(now - timedelta(days=30), now) == now  # juda eski
+    assert _received_at(None, now) == now

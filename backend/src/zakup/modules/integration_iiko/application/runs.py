@@ -45,7 +45,7 @@ TASHKENT_OFFSET = timedelta(hours=5)  # UTC+5, DST yo'q
 DEFAULT_PRICE_DAYS = 30
 MAX_PRICE_DAYS = 120
 DEFAULT_CONSUMPTION_DAYS = 3  # kundalik: oxirgi kunlar qayta olinadi (iiko'da kechikkan tuzatishlar)
-MAX_CONSUMPTION_DAYS = 60
+MAX_CONSUMPTION_DAYS = 31  # OLAP bo'laklari xotirada: worker 256 MB (1 GB server) — bir oydan oshmasin
 BACKFILL_CONSUMPTION_DAYS = 28  # birinchi marta — o'rtacha sarf oynasi
 CONSUMPTION_CHUNK_DAYS = 7  # OLAP javobi katta: haftalik bo'laklar (Sebzar: ~30 ming qator / hafta)
 
@@ -198,6 +198,13 @@ class ScopeFactory(Protocol):
     def __call__(self) -> AbstractAsyncContextManager[SyncScope]: ...
 
 
+
+def _public_error(exc: Exception) -> str:
+    """Foydalanuvchiga ko'rinadigan xato: domen xatosi — kaliti; boshqasi (SQL, parametrlar) — faqat turi, tafsilot logda."""
+    if isinstance(exc, DomainError):
+        return f"{type(exc).__name__}: {exc}"[:500]
+    return f"{type(exc).__name__} (tafsilot — worker logida)"
+
 class RunNextSync:
     """Worker qadami: navbatdan bitta ishni oladi va bajaradi. True — ish bor edi."""
 
@@ -218,7 +225,7 @@ class RunNextSync:
             stats = await self._execute(run)
         except Exception as exc:  # worker yiqilmasin: xato run'ga yoziladi
             log.exception("iiko_sync_failed", run_id=str(run.id))
-            await self._finish(run.id, {}, f"{type(exc).__name__}: {exc}"[:2000])
+            await self._finish(run.id, {}, _public_error(exc))
         else:
             log.info("iiko_sync_done", run_id=str(run.id), **stats)
             await self._finish(run.id, stats, None)

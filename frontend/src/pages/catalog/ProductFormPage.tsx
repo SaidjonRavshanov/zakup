@@ -2,7 +2,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useNavigate, useParams } from '@tanstack/react-router'
 import { Plus } from 'lucide-react'
-import { useState, type FormEvent } from 'react'
+import { useId, useState, type FormEvent } from 'react'
 import { BASE_UNITS, CATALOG_KEY, catalogApi, categoriesQuery, productQuery, type ProductDetail, type ProductInput } from '@/entities/catalog'
 import { useHasRole } from '@/entities/user'
 import { describeError } from '@/shared/api/errors'
@@ -37,6 +37,7 @@ function ProductForm({ product }: { product?: ProductDetail }) {
     category_id: product?.category_id ?? null,
   })
   const [newCategory, setNewCategory] = useState('')
+  const newCategoryId = useId()
 
   const done = async (id: string) => {
     toast(z.toast_saved)
@@ -107,9 +108,21 @@ function ProductForm({ product }: { product?: ProductDetail }) {
           />
         </Field>
         {isAdmin && (
-          <Field label={t.catalog.product.newCategory}>
+          <Field label={t.catalog.product.newCategory} id={newCategoryId}>
             <div className="flex gap-2">
-              <Input className="flex-1" maxLength={200} value={newCategory} onChange={(e) => setNewCategory(e.target.value)} />
+              <Input
+                id={newCategoryId}
+                className="flex-1"
+                maxLength={200}
+                value={newCategory}
+                onChange={(e) => setNewCategory(e.target.value)}
+                onKeyDown={(e) => {
+                  // Enter — butun formani emas, faqat kategoriyani qo'shadi
+                  if (e.key !== 'Enter') return
+                  e.preventDefault()
+                  if (newCategory.trim() && !addCategory.isPending) addCategory.mutate()
+                }}
+              />
               <Btn
                 icon={<Plus size={20} />}
                 disabled={!newCategory.trim()}

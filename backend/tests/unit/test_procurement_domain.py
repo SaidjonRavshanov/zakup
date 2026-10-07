@@ -187,6 +187,8 @@ def _sent(order: PurchaseOrder) -> PurchaseOrder:
         (LineResponse(ResponseKind.PRICE_CHANGED, price_per_pack=Decimal(257000)), OrderStatus.CONFIRMED),  # +2.8%
         (LineResponse(ResponseKind.PRICE_CHANGED, price_per_pack=Decimal(260000)), OrderStatus.REAPPROVAL),  # +4%
         (LineResponse(ResponseKind.QTY_CHANGED, qty_packs=Decimal(1)), OrderStatus.PARTIALLY_CONFIRMED),
+        # Ko'paytirish (ochiq havoladan ham) — tasdiqlanmagan xarid: qayta tasdiqlash
+        (LineResponse(ResponseKind.QTY_CHANGED, qty_packs=Decimal(200)), OrderStatus.REAPPROVAL),
         (LineResponse(ResponseKind.OUT_OF_STOCK), OrderStatus.CANCELLED),
     ],
 )
@@ -265,3 +267,39 @@ def test_order_message_uses_supplier_units() -> None:
     assert "Заказ PO-000045 — Tarnov" in text
     assert "1. Мука высший сорт — 2 меш (50 кг) × 250 000 = 500 000 сум" in text
     assert text.endswith("https://x/s/abc")
+
+
+def test_confirmed_order_can_be_cancelled_until_received() -> None:
+    order = _sent(_order())
+    order.record_response({}, Tolerance(), at=NOW)
+    assert order.status is OrderStatus.CONFIRMED
+    order.cancel(reason="Yetkazuvchi kelmadi")
+    assert order.status is OrderStatus.CANCELLED
+
+
+def test_approving_changes_emits_event() -> None:
+    order = _sent(_order())
+    order.record_response(
+        {order.lines[0].id: LineResponse(ResponseKind.QTY_CHANGED, qty_packs=Decimal(3))}, Tolerance(), at=NOW
+    )
+    assert order.status is OrderStatus.REAPPROVAL
+    order.pull_events()
+    order.approve_changes()
+    (event,) = order.pull_events()
+    assert (event.event_type, order.status) == ("procurement.order_changes_approved", OrderStatus.CONFIRMED)
+
+
+def test_request_amount_is_rounded_to_supplier_packs() -> None:
+    offer = OfferChoice(
+        new_id(),
+        new_id(),
+        Decimal(10000),
+        pack_unit="bag",
+        pack_factor=Decimal(25),
+        pack_multiple=Decimal(2),
+        price_per_pack=Decimal(250000),
+    )
+    assert offer.packs(Decimal(1)) == Decimal(2)  # 1 kg → 1 qop → karralilik 2
+    assert offer.packs(Decimal(51)) == Decimal(4)
+    legacy = OfferChoice(new_id(), new_id(), Decimal(10000))
+    assert legacy.packs(Decimal(1)) is None  # eski qator: bazaviy narx bo'yicha

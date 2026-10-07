@@ -1,7 +1,7 @@
 from typing import Any
 from uuid import UUID
 
-from sqlalchemy import exists, func, select, update
+from sqlalchemy import exists, func, select, text, update
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -62,6 +62,9 @@ class SqlLinks:
         )
 
 
+STUCK_AFTER_MIN = 60  # eng uzun sinxron (60 kunlik sarf) ham shundan oldin tugaydi
+
+
 class SqlSyncRuns:
     def __init__(self, session: AsyncSession) -> None:
         self._session = session
@@ -86,6 +89,15 @@ class SqlSyncRuns:
         return bool(await self._session.scalar(select(exists().where(condition))))
 
     async def claim_next(self) -> SyncRun | None:
+        # Worker yiqilgan / qayta ishga tushgan paytdagi "osilib qolgan" ishlar: aks holda has_pending abadiy True
+        await self._session.execute(
+            update(sync_runs)
+            .where(
+                sync_runs.c.status == SyncStatus.RUNNING.value,
+                sync_runs.c.started_at < func.now() - text(f"interval '{STUCK_AFTER_MIN} minutes'"),
+            )
+            .values(status=SyncStatus.FAILED.value, error="iiko.interrupted", finished_at=func.now())
+        )
         query = (
             select(sync_runs.c.id, sync_runs.c.server_code, sync_runs.c.kind, sync_runs.c.params)
             .where(sync_runs.c.status == SyncStatus.QUEUED.value)

@@ -24,6 +24,7 @@ class SubmitReceiptCommand:
     payment_method: PaymentMethod | None
     comment: str | None
     lines: tuple[FactLineData, ...]
+    captured_at: datetime | None = None  # oflayn qabul vaqti (telefonda); None — server vaqti
 
 
 @dataclass(frozen=True, slots=True)

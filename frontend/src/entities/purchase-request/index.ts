@@ -117,6 +117,20 @@ export const requestsQuery = queryOptions({
   queryFn: ({ signal }) => apiRequest<RequestListItem[]>('/procurement/requests?limit=200', { signal }),
 })
 
+/** Ish ro'yxatlari uchun: server tomonda holat filtri (`?status=A&status=B`) — eng yangi 200 ta oynasiga bog'liq emas. */
+export const requestsByStatusQuery = (statuses: ReadonlyArray<RequestStatus>) => {
+  const filter = [...statuses].sort()
+  const search = new URLSearchParams({ limit: '200' })
+  for (const value of filter) search.append('status', value)
+  return queryOptions({
+    queryKey: [...REQUESTS_KEY, 'list', filter.join(',')],
+    queryFn: ({ signal }) => apiRequest<RequestListItem[]>(`/procurement/requests?${search}`, { signal }),
+  })
+}
+
+/** Vazifalar / bosh sahifa ko'radigan holatlar. */
+export const OPEN_REQUEST_STATUSES: ReadonlyArray<RequestStatus> = ['DRAFT', 'PENDING_APPROVAL', 'REJECTED']
+
 export const requestQuery = (id: string) =>
   queryOptions({
     queryKey: [...REQUESTS_KEY, id],

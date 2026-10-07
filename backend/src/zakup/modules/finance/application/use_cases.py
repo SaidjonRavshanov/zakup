@@ -283,16 +283,28 @@ class CreatePayment:
             return payment.id
 
 
+async def _require_payment_stores(
+    actor: Principal, roles: tuple[Role, ...], payment: PaymentRequest, obligations: ObligationRepository
+) -> None:
+    """Bitta omborli xodim boshqa ombor nakladnoylari bo'yicha to'lovni tasdiqlay / bekor qila olmasin."""
+    found = await obligations.get_many(line.obligation_id for line in payment.lines)
+    _require_stores(actor, roles, found.values())
+
+
 class ApprovePayment:
-    def __init__(self, uow: UnitOfWork, payments: PaymentRepository, clock: Clock = utc_now) -> None:
+    def __init__(
+        self, uow: UnitOfWork, payments: PaymentRepository, obligations: ObligationRepository, clock: Clock = utc_now
+    ) -> None:
         self._uow = uow
         self._payments = payments
+        self._obligations = obligations
         self._clock = clock
 
     async def __call__(self, actor: Principal, payment_id: UUID) -> None:
         actor.require(*APPROVERS)
         async with self._uow:
             payment = await _load(self._payments, payment_id)
+            await _require_payment_stores(actor, APPROVERS, payment, self._obligations)
             payment.approve(by=actor.user_id, at=self._clock())
             await self._payments.save(payment)
             self._uow.track(payment)
@@ -300,15 +312,19 @@ class ApprovePayment:
 
 
 class RejectPayment:
-    def __init__(self, uow: UnitOfWork, payments: PaymentRepository, clock: Clock = utc_now) -> None:
+    def __init__(
+        self, uow: UnitOfWork, payments: PaymentRepository, obligations: ObligationRepository, clock: Clock = utc_now
+    ) -> None:
         self._uow = uow
         self._payments = payments
+        self._obligations = obligations
         self._clock = clock
 
     async def __call__(self, actor: Principal, payment_id: UUID, *, comment: str) -> None:
         actor.require(*APPROVERS)
         async with self._uow:
             payment = await _load(self._payments, payment_id)
+            await _require_payment_stores(actor, APPROVERS, payment, self._obligations)
             payment.reject(by=actor.user_id, comment=comment, at=self._clock())
             await self._payments.save(payment)
             self._uow.track(payment)
@@ -316,14 +332,16 @@ class RejectPayment:
 
 
 class CancelPayment:
-    def __init__(self, uow: UnitOfWork, payments: PaymentRepository) -> None:
+    def __init__(self, uow: UnitOfWork, payments: PaymentRepository, obligations: ObligationRepository) -> None:
         self._uow = uow
         self._payments = payments
+        self._obligations = obligations
 
     async def __call__(self, actor: Principal, payment_id: UUID) -> None:
         actor.require(*PAYERS)
         async with self._uow:
             payment = await _load(self._payments, payment_id)
+            await _require_payment_stores(actor, PAYERS, payment, self._obligations)
             payment.cancel()
             await self._payments.save(payment)
             self._uow.track(payment)
@@ -377,7 +395,12 @@ class ListPayments:
         limit: int = 100,
     ) -> list[PaymentListItem]:
         actor.require(*VIEWERS)
-        items = await self._reader.payments(statuses=statuses, supplier_id=supplier_id, limit=max(1, min(limit, 200)))
+        items = await self._reader.payments(
+            statuses=statuses,
+            supplier_id=supplier_id,
+            limit=max(1, min(limit, 200)),
+            store_ids=_store_scope(actor, VIEWERS),
+        )
         names, _ = await self._suppliers.labels(suppliers={i.supplier_id for i in items})
         return [replace(item, supplier_name=names.get(item.supplier_id)) for item in items]
 
@@ -389,7 +412,7 @@ class GetPayment:
 
     async def __call__(self, actor: Principal, payment_id: UUID) -> PaymentDetail:
         actor.require(*VIEWERS)
-        detail = await self._reader.payment(payment_id)
+        detail = await self._reader.payment(payment_id, store_ids=_store_scope(actor, VIEWERS))
         if detail is None:
             raise NotFoundError("payment.not_found")
         names, _ = await self._suppliers.labels(suppliers={detail.supplier_id})

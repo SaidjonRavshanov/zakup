@@ -20,9 +20,7 @@ const ORDER: Map = {
   CONFIRMED: ['po_confirmed', 'solid'],
   PARTIALLY_CONFIRMED: ['po_partial', 'solid'],
   REAPPROVAL: ['po_reapproval', 'warn'],
-  RECEIVING: ['po_confirmed', 'solid'],
   RECEIVED: ['po_received', 'ok'],
-  CLOSED: ['po_received', 'ok'],
   PARTIALLY_RECEIVED: ['po_received_part', 'warn'],
   CANCELLED: ['po_cancelled', 'neutral'],
 }

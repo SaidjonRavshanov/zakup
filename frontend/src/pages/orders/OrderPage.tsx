@@ -8,6 +8,7 @@ import {
   ordersApi,
   purchaseOrderQuery,
   type Channel,
+  type LineResponseInput,
   type PurchaseOrderDetail,
   type PurchaseOrderLine,
 } from '@/entities/purchase-order'
@@ -35,6 +36,7 @@ import {
   usePageActions,
   type PageAction,
 } from '@/shared/kit'
+import { telegram } from '@/shared/lib/telegram'
 
 export default function OrderPage() {
   const { orderId } = useParams({ from: '/shell/orders/$orderId' })
@@ -46,8 +48,9 @@ export default function OrderPage() {
   return <OrderView order={order} />
 }
 
-const CANCELLABLE = ['CREATED', 'SENT', 'REAPPROVAL']
-const RECEIVABLE = ['SENT', 'CONFIRMED', 'PARTIALLY_CONFIRMED', 'RECEIVING']
+// Qabulgacha: tasdiqlangan, lekin kelmagan buyurtma ham bekor qilinadi (backend PurchaseOrder.cancel)
+const CANCELLABLE = ['CREATED', 'SENT', 'REAPPROVAL', 'CONFIRMED', 'PARTIALLY_CONFIRMED']
+const RECEIVABLE = ['SENT', 'CONFIRMED', 'PARTIALLY_CONFIRMED']
 
 function channelLabel(z: Zk, c: Channel): string {
   return { telegram: 'Telegram', whatsapp: 'WhatsApp', phone: z.ch_phone, email: 'E-mail', other: z.ch_other }[c]
@@ -72,11 +75,28 @@ function OrderView({ order }: { order: PurchaseOrderDetail }) {
       queryClient.invalidateQueries({ queryKey: ORDERS_KEY }),
       queryClient.invalidateQueries({ queryKey: REQUESTS_KEY }),
     ])
-  const action = useMutation({
-    mutationFn: (run: { fn: () => Promise<unknown>; msg: string; after?: () => void }) => run.fn(),
-    onSuccess: async (_, run) => {
-      toast(run.msg)
-      run.after?.()
+  // Har amalning o'z holati: bekor qilish xatosi javob oynasida chiqmasin (va aksincha)
+  const approve = useMutation({
+    mutationFn: () => ordersApi.approveChanges(order.id),
+    onSuccess: async () => {
+      toast(z.toast_price_ok)
+      await refresh()
+    },
+  })
+  const respond = useMutation({
+    mutationFn: (lines: LineResponseInput[]) => ordersApi.respond(order.id, lines),
+    onSuccess: async () => {
+      toast(z.toast_resp)
+      setResponding(false)
+      await refresh()
+    },
+  })
+  const cancel = useMutation({
+    mutationFn: () => ordersApi.cancel(order.id, reason.trim()),
+    onSuccess: async () => {
+      toast(z.toast_po_cancelled)
+      setCancelling(false)
+      setReason('')
       await refresh()
     },
   })
@@ -85,7 +105,7 @@ function OrderView({ order }: { order: PurchaseOrderDetail }) {
     onSuccess: async (result) => {
       setSent(result)
       toast(z.toast_sent)
-      await queryClient.invalidateQueries({ queryKey: ORDERS_KEY })
+      await refresh()
     },
   })
 
@@ -114,7 +134,7 @@ function OrderView({ order }: { order: PurchaseOrderDetail }) {
       label: z.a_approve,
       cancel: z.cancel,
     })
-    if (ok) action.mutate({ fn: () => ordersApi.approveChanges(order.id), msg: z.toast_price_ok })
+    if (ok) approve.mutate()
   }
 
   let primary: PageAction | null = null
@@ -122,7 +142,7 @@ function OrderView({ order }: { order: PurchaseOrderDetail }) {
     primary = { label: z.a_send, onClick: () => send.mutate(), loading: send.isPending }
   else if (canRespond) primary = { label: z.a_enter_resp, onClick: () => setResponding(true) }
   else if (order.status === 'REAPPROVAL' && isDecider)
-    primary = { label: z.a_approve_price, onClick: () => void approvePrice(), loading: action.isPending }
+    primary = { label: z.a_approve_price, onClick: () => void approvePrice(), loading: approve.isPending }
   if (!primary && RECEIVABLE.includes(order.status) && canReceive)
     primary = { label: z.a_receive, onClick: () => navigate({ to: '/receiving/$orderId', params: { orderId: order.id } }) }
   usePageActions({
@@ -132,7 +152,7 @@ function OrderView({ order }: { order: PurchaseOrderDetail }) {
 
   const s = status(z, 'order', order.status)
   const hasConf = order.lines.some((l) => l.response !== null)
-  const error = action.error ?? send.error
+  const error = approve.error ?? send.error
 
   return (
     <div className="mx-auto max-w-[720px]">
@@ -140,7 +160,7 @@ function OrderView({ order }: { order: PurchaseOrderDetail }) {
 
       {error && (
         <Banner tone="danger" onClose={() => {
-            action.reset()
+            approve.reset()
             send.reset()
           }}>
           {describeError(error, t)}
@@ -214,12 +234,8 @@ function OrderView({ order }: { order: PurchaseOrderDetail }) {
             <Btn icon={<Copy size={20} />} onClick={() => void copy()}>
               {z.a_copy}
             </Btn>
-            <a className="contents" href={shareUrl('telegram')} target="_blank" rel="noreferrer">
-              <Btn>Telegram</Btn>
-            </a>
-            <a className="contents" href={shareUrl('whatsapp')} target="_blank" rel="noreferrer">
-              <Btn>WhatsApp</Btn>
-            </a>
+            <Btn onClick={() => telegram.openLink(shareUrl('telegram'))}>Telegram</Btn>
+            <Btn onClick={() => telegram.openLink(shareUrl('whatsapp'))}>WhatsApp</Btn>
           </div>
         </>
       )}
@@ -235,24 +251,20 @@ function OrderView({ order }: { order: PurchaseOrderDetail }) {
           </Btn>
         )}
         {sent && (
-          <a href={sent.response_url} target="_blank" rel="noreferrer" className="contents">
-            <Btn variant="ghost">
-              {z.as_supplier}
-              <ChevronRight size={20} />
-            </Btn>
-          </a>
+          <Btn variant="ghost" onClick={() => telegram.openLink(sent.response_url)}>
+            {z.as_supplier}
+            <ChevronRight size={20} />
+          </Btn>
         )}
       </div>
 
       <Sheet open={responding} title={z.supplier_resp} onClose={() => setResponding(false)}>
         <ResponseForm
           lines={order.lines}
-          busy={action.isPending}
-          onSubmit={(lines) =>
-            action.mutate({ fn: () => ordersApi.respond(order.id, lines), msg: z.toast_resp, after: () => setResponding(false) })
-          }
+          busy={respond.isPending}
+          onSubmit={(lines) => respond.mutate(lines)}
         />
-        {action.error && <Banner tone="danger">{describeError(action.error, t)}</Banner>}
+        {respond.error && <Banner tone="danger">{describeError(respond.error, t)}</Banner>}
       </Sheet>
 
       <Sheet open={cancelling} title={z.cancel_po_title} onClose={() => setCancelling(false)}>
@@ -264,7 +276,7 @@ function OrderView({ order }: { order: PurchaseOrderDetail }) {
           onChange={(e) => setReason(e.target.value)}
         />
         <div className="mt-1.5 text-[13px] text-n7">{z.reason_req}</div>
-        {action.error && <Banner tone="danger">{describeError(action.error, t)}</Banner>}
+        {cancel.error && <Banner tone="danger">{describeError(cancel.error, t)}</Banner>}
         <Btn
           size="lg"
           block
@@ -272,17 +284,8 @@ function OrderView({ order }: { order: PurchaseOrderDetail }) {
           className="mt-4"
           style={{ borderColor: 'var(--zk-danger)' }}
           disabled={!reason.trim()}
-          loading={action.isPending}
-          onClick={() =>
-            action.mutate({
-              fn: () => ordersApi.cancel(order.id, reason.trim()),
-              msg: z.toast_po_cancelled,
-              after: () => {
-                setCancelling(false)
-                setReason('')
-              },
-            })
-          }
+          loading={cancel.isPending}
+          onClick={() => cancel.mutate()}
         >
           {z.a_cancel_po}
         </Btn>

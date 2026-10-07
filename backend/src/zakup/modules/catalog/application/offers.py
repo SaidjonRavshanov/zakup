@@ -99,7 +99,11 @@ class ReviseOffer:
             offer.revise(
                 supplier_sku=cmd.supplier_sku, supplier_name=cmd.supplier_product_name, packaging=_packaging(cmd)
             )
-            record = offer.change_price(price, valid_from or business_today(self._clock), PriceSource.MANUAL)
+            today = business_today(self._clock)
+            # Kelajakdagi narx darhol amal qilib qolardi (narx tarixi "rejalashtirilgan narx"ni bilmaydi)
+            if valid_from is not None and valid_from > today:
+                raise InvalidOfferError("offer.price_future")
+            record = offer.change_price(price, valid_from or today, PriceSource.MANUAL)
             await self._offers.save(offer)
             if record is not None:
                 await self._history.append(record)

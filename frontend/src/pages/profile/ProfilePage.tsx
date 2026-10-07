@@ -3,22 +3,25 @@ import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from '@tanstack/react-router'
 import { ChevronRight, RefreshCw } from 'lucide-react'
 import { storesQuery } from '@/entities/catalog'
-import { changeMyLocale, meQuery, setActiveRole, useActiveRole, useHasRole, userRoles } from '@/entities/user'
+import { changeMyLocale, clearActiveRole, meQuery, setActiveRole, useActiveRole, useHasRole, userRoles } from '@/entities/user'
 import { LanguageSwitch } from '@/features/language-switch'
 import { ThemeSwitch } from '@/features/theme-switch'
 import { forgetDevIdentity, signOut } from '@/shared/api/auth'
 import { useZk } from '@/shared/i18n/use-zk'
-import { Blueprint, Btn, Chips, KV, RowsSkeleton, Section, toast } from '@/shared/kit'
+import { Blueprint, Btn, Chips, KV, RowsSkeleton, Section, confirmAction, toast } from '@/shared/kit'
 import { isInTelegram } from '@/shared/lib/telegram'
+import { clearOutbox, usePendingReceipts } from '@/shared/offline/outbox'
+import { L } from './i18n'
 
 export default function ProfilePage() {
   const navigate = useNavigate()
-  const { z } = useZk()
+  const { z, locale } = useZk()
   const queryClient = useQueryClient()
   const { data: me } = useQuery(meQuery)
   const { data: stores } = useQuery(storesQuery)
   const role = useActiveRole(me)
   const isAdmin = useHasRole('admin')
+  const queue = usePendingReceipts()
 
   if (!me) return <RowsSkeleton n={4} />
 
@@ -30,8 +33,17 @@ export default function ProfilePage() {
     : [...new Set(scoped)].map((id) => stores?.find((s) => s.id === id)?.name ?? '…').join(', ')
 
   const exit = async () => {
+    // Yuborilmagan qabullar o'chib ketadi — avval ogohlantiramiz
+    if (
+      queue.length > 0 &&
+      !(await confirmAction({ title: L[locale].queueTitle(queue.length), body: L[locale].queueBody, label: z.logout, cancel: z.cancel, danger: true }))
+    )
+      return
     await signOut().catch(() => undefined)
     forgetDevIdentity()
+    // Keyingi foydalanuvchiga oldingisining navbati va roli o'tmasin
+    await clearOutbox().catch(() => undefined)
+    clearActiveRole()
     queryClient.clear()
     window.location.reload()
   }

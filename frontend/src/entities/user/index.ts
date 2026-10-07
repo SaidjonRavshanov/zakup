@@ -7,6 +7,6 @@ export {
   usersQuery,
   type UserStatusFilter,
 } from './api'
-export { setActiveRole, useActiveRole } from './active-role'
+export { clearActiveRole, setActiveRole, useActiveRole } from './active-role'
 export { useHasRole } from './permissions'
 export { ROLES, userRoles, type Grant, type Role, type User } from './model'

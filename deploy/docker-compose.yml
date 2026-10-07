@@ -21,7 +21,6 @@ services:
     command: >-
       uvicorn zakup.entrypoints.api:app --host 0.0.0.0 --port 8010
       --proxy-headers --forwarded-allow-ips=*
-      --limit-max-requests 2000
     ports:
       - "127.0.0.1:8010:8010"
     mem_limit: 320m
@@ -37,3 +36,5 @@ services:
     command: ["python", "-m", "zakup.entrypoints.worker"]
     mem_limit: 256m
     memswap_limit: 512m
+    # iiko sinxroni o'rtasida to'xtatilsa /logout ulgursin (litsenziya: bitta sessiya)
+    stop_grace_period: 6m

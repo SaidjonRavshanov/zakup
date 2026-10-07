@@ -60,10 +60,8 @@ export const ru: Messages = {
     CONFIRMED: 'Подтверждён',
     PARTIALLY_CONFIRMED: 'Частично',
     REAPPROVAL: 'Переутверждение',
-    RECEIVING: 'На приёмке',
     RECEIVED: 'Принят',
     PARTIALLY_RECEIVED: 'Принят частично',
-    CLOSED: 'Закрыт',
     CANCELLED: 'Отменён',
   },
   apiStatus: {

@@ -150,7 +150,7 @@ class ListUsers:
     async def __call__(
         self, actor: Principal, *, status: UserStatus | None = None, search: str | None = None, limit: int = 100
     ) -> list[UserProfile]:
-        actor.require(Role.ADMIN)
+        actor.require_global(Role.ADMIN)  # bitta omborli admin o'ziga global admin bera olmasin
         return await self._reader.list(
             status=status,
             search=search.strip() if search else None,
@@ -165,7 +165,7 @@ class ActivateUser:
         self._clock = clock
 
     async def __call__(self, actor: Principal, user_id: UUID) -> None:
-        actor.require(Role.ADMIN)
+        actor.require_global(Role.ADMIN)  # bitta omborli admin o'ziga global admin bera olmasin
         async with self._uow:
             user = await _load(self._users, user_id)
             user.activate(actor, self._clock())
@@ -181,7 +181,7 @@ class DeactivateUser:
         self._refresh = refresh
 
     async def __call__(self, actor: Principal, user_id: UUID) -> None:
-        actor.require(Role.ADMIN)
+        actor.require_global(Role.ADMIN)  # bitta omborli admin o'ziga global admin bera olmasin
         async with self._uow:
             user = await _load(self._users, user_id)
             user.deactivate(actor)
@@ -197,7 +197,7 @@ class SetUserRoles:
         self._users = users
 
     async def __call__(self, actor: Principal, user_id: UUID, grants: frozenset[RoleGrant]) -> None:
-        actor.require(Role.ADMIN)
+        actor.require_global(Role.ADMIN)  # bitta omborli admin o'ziga global admin bera olmasin
         async with self._uow:
             user = await _load(self._users, user_id)
             user.set_grants(grants, actor)
