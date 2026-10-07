@@ -12,10 +12,14 @@ import { useTodo } from '@/features/todo'
 import { useZk } from '@/shared/i18n/use-zk'
 import { ActionBar, Btn, ConfirmHost, Sheet, ToastHost } from '@/shared/kit'
 import { cn } from '@/shared/lib/cn'
-import { telegram } from '@/shared/lib/telegram'
+import { isInTelegram, telegram } from '@/shared/lib/telegram'
 import { MENU, NAV, isRootPath, isWidePath, sectionOf, type NavKey } from './nav'
 
-const DESKTOP = '(min-width: 1024px)'
+/** To'liq ekranda Telegram o'z tugmalarini tepada chizadi — kontent ulardan pastda boshlanadi. */
+const TG_TOP = 'calc(var(--tg-safe-area-inset-top, 0px) + var(--tg-content-safe-area-inset-top, 0px))'
+
+// Chap menyu + kontent (232 + 720) — 900px dan; Telegram Desktop oynasi ham shunga yetadi
+const DESKTOP = '(min-width: 900px)'
 
 function useDesktop(): boolean {
   return useSyncExternalStore(
@@ -69,9 +73,12 @@ export function AppShell() {
   const count = (k: NavKey) => (k === 'home' ? todo.length : 0)
 
   return (
-    <div className="flex min-h-dvh flex-col bg-ground text-ink lg:pl-[232px]">
+    <div className="flex min-h-dvh flex-col bg-ground text-ink min-[900px]:pl-[232px]" style={{ paddingTop: TG_TOP }}>
       {desktop && (
-        <aside className="fixed inset-y-0 left-0 z-20 flex w-[232px] flex-col gap-0.5 overflow-y-auto border-r border-line px-3 py-5">
+        <aside
+          className="fixed bottom-0 left-0 z-20 flex w-[232px] flex-col gap-0.5 overflow-y-auto border-r border-line px-3 py-5"
+          style={{ top: TG_TOP }}
+        >
           <div className="px-2.5 pb-[18px]">
             <div className="font-head text-[28px] leading-none" style={{ fontWeight: 600 }}>
               Zakup
@@ -108,12 +115,13 @@ export function AppShell() {
 
       <main
         className={cn(
-          'mx-auto w-full flex-1 px-4 pb-7 pt-3 lg:px-8 lg:pb-12 lg:pt-6',
+          'mx-auto w-full flex-1 px-4 pb-7 pt-3 min-[900px]:px-8 min-[900px]:pb-12 min-[900px]:pt-6',
           desktop ? (isWidePath(path) ? 'max-w-[1104px]' : 'max-w-[784px]') : 'max-w-[640px]',
         )}
         style={{ paddingTop: desktop ? undefined : 'max(12px, env(safe-area-inset-top))' }}
       >
-        {desktop && !root && (
+        {/* Telegram ichida "Назад" — Telegram'ning o'z tugmasi */}
+        {desktop && !root && !isInTelegram && (
           <Btn variant="ghost" size="sm" icon={<ChevronLeft size={20} />} onClick={back} className="mb-2">
             {z.back}
           </Btn>

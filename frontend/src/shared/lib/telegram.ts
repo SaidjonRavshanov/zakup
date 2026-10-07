@@ -29,6 +29,9 @@ interface TgWebApp {
   setBackgroundColor(color: string): void
   setBottomBarColor?(color: string): void
   disableVerticalSwipes?(): void
+  /** Bot API 8.0: to'liq ekran (Telegram Desktop'da — butun oyna/monitor). */
+  requestFullscreen?(): void
+  isFullscreen?: boolean
   onEvent(event: 'themeChanged', cb: () => void): void
   offEvent(event: 'themeChanged', cb: () => void): void
   BackButton: TgButton
@@ -50,6 +53,9 @@ const webApp: TgWebApp | undefined = window.Telegram?.WebApp
 /** Telegram ichida ochilganmi (brauzerda initData bo'sh bo'ladi). */
 export const isInTelegram = Boolean(webApp?.initData)
 
+/** Kompyuterdagi Telegram (Windows/Linux — tdesktop, macOS) — keng ekran uchun to'liq ekran so'raladi. */
+export const isTelegramDesktop = isInTelegram && ['tdesktop', 'macos'].includes(webApp?.platform ?? '')
+
 export const telegram = {
   initData: (): string => webApp?.initData ?? '',
 
@@ -64,6 +70,14 @@ export const telegram = {
     if (!isInTelegram || !webApp) return
     webApp.ready()
     webApp.expand()
+    // Kompyuterda kichik oyna telefon ko'rinishini beradi — to'liq ekranda chap menyuli desktop ko'rinishi
+    if (isTelegramDesktop && webApp.isVersionAtLeast('8.0')) {
+      try {
+        webApp.requestFullscreen?.()
+      } catch {
+        /* eski klient — oddiy oynada qoladi */
+      }
+    }
     // Ro'yxatni pastga tortganda ilova yopilib qolmasin
     if (webApp.isVersionAtLeast('7.7')) webApp.disableVerticalSwipes?.()
   },

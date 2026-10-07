@@ -91,7 +91,7 @@ function Suppliers() {
   return (
     <>
       {/* desktop: jadval */}
-      <table className="zk-table mt-3 hidden lg:table">
+      <table className="zk-table mt-3 hidden min-[900px]:table">
         <thead>
           <tr>
             <th>{z.supplier}</th>
@@ -133,7 +133,7 @@ function Suppliers() {
       </table>
 
       {/* telefon: qatorlar */}
-      <div className="lg:hidden">
+      <div className="min-[900px]:hidden">
         {data.items.map((s) => {
           const sc = scoreView(s.score, z, L[locale].noScore)
           const metrics: Array<[string, string]> = [

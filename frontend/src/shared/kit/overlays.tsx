@@ -92,7 +92,12 @@ export function ToastHost() {
       key={t.id}
       role="status"
       className="fixed left-1/2 top-3 z-[60] flex w-max max-w-[90%] -translate-x-1/2 items-center gap-2 bg-ink px-3.5 py-2.5 text-[14px] text-ground"
-      style={{ boxShadow: 'var(--shadow-md)', animation: 'zkFade .15s ease-out', marginTop: 'env(safe-area-inset-top)' }}
+      style={{
+        boxShadow: 'var(--shadow-md)',
+        animation: 'zkFade .15s ease-out',
+        // Telegram to'liq ekranida uning tugmalari ostida
+        marginTop: 'calc(env(safe-area-inset-top) + var(--tg-safe-area-inset-top, 0px) + var(--tg-content-safe-area-inset-top, 0px))',
+      }}
     >
       <CheckIcon size={20} />
       <span>{t.text}</span>

@@ -67,7 +67,7 @@ export default function FinancePage() {
         ) : (
           <>
             {/* Desktop — jadval */}
-            <table className="zk-table mt-3 hidden lg:table">
+            <table className="zk-table mt-3 hidden min-[900px]:table">
               <thead>
                 <tr>
                   <th>{z.supplier}</th>
@@ -96,7 +96,7 @@ export default function FinancePage() {
               </tbody>
             </table>
             {/* Telefon — qatorlar */}
-            <div className="lg:hidden">
+            <div className="min-[900px]:hidden">
               {debts.map((b) => (
                 <button
                   key={b.supplier_id}
