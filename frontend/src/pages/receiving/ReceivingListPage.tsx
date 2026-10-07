@@ -6,7 +6,7 @@ import { ORDERS_KEY, purchaseOrdersQuery, type PurchaseOrderStatus } from '@/ent
 import { RECEIPTS_KEY, receiptsQuery } from '@/entities/receipt'
 import { useZk } from '@/shared/i18n/use-zk'
 import { Blueprint, Btn, Empty, Row, RowsSkeleton, Seg, Tag, confirmAction, status, toast } from '@/shared/kit'
-import { discardReceipt, flush, onReceiptSent, usePendingReceipts } from '@/shared/offline/outbox'
+import { discardReceipt, flush, onReceiptSent, retryReceipt, usePendingReceipts } from '@/shared/offline/outbox'
 import { useOnline } from './use-online'
 
 /** Tovar kelishi mumkin bo'lgan buyurtmalar (javob kelmagan bo'lsa ham). */
@@ -78,9 +78,15 @@ export default function ReceivingListPage() {
                   </div>
                 </div>
                 {item.error ? (
-                  <Btn danger onClick={() => void discard(item.id)}>
-                    {z.a_delete}
-                  </Btn>
+                  <div className="flex shrink-0 flex-col gap-1.5">
+                    {/* Server rad etgan: sabab tuzatilgan bo'lsa (buyurtma holati, narx) — qayta yuborish */}
+                    <Btn size="sm" disabled={!online} onClick={() => void retryReceipt(item.id)}>
+                      {z.a_resend}
+                    </Btn>
+                    <Btn size="sm" danger onClick={() => void discard(item.id)}>
+                      {z.a_delete}
+                    </Btn>
+                  </div>
                 ) : (
                   <Clock size={20} className="shrink-0 text-n7" />
                 )}

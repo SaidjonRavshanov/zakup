@@ -97,6 +97,11 @@ class RequestLineView:
     supplier_name: str | None = None
     qty_suggested: Decimal | None = None
     calc: dict[str, str | None] | None = None
+    # Buyurtmaga qanday ketadi: yetkazuvchi qadog'iga yaxlitlangan (PO yaratishdagi hisob bilan bir xil)
+    pack_unit: str | None = None
+    pack_factor: Decimal | None = None
+    qty_packs: Decimal | None = None
+    order_amount: Decimal | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -126,6 +131,8 @@ class RequestDetail:
     version: int
     store_name: str | None = None
     orders: tuple["OrderListItem", ...] = ()
+    # Qadoqqa yaxlitlangan jami (rad etilgan qatorlarsiz) — buyurtmalar summasi shunday bo'ladi
+    order_total: Decimal | None = None
 
 
 # ---------------------------------------------------------------- buyurtma (PO)

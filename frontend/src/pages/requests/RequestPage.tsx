@@ -111,7 +111,7 @@ function RequestView({ request }: { request: RequestDetail }) {
 
   const selected = request.lines.filter((l) => !deselected.has(l.id))
   const partial = selected.length < request.lines.length
-  const selTotal = selected.reduce((a, l) => a + Number(l.amount), 0)
+  const selTotal = selected.reduce((a, l) => a + Number(l.order_amount ?? l.amount), 0)
   const toggle = (id: string) =>
     setDeselected((prev) => {
       const next = new Set(prev)
@@ -215,7 +215,7 @@ function RequestView({ request }: { request: RequestDetail }) {
         size={22}
         items={[
           { label: z.need_to, value: f.dt(request.needed_by) },
-          { label: z.total, value: f.money(request.total) },
+          { label: z.total, value: f.money(request.order_total ?? request.total) },
         ]}
       />
       {request.type === 'auto' && <div className="mt-2.5 text-[14px] text-n7">{`${z.author}: ${z.autoreq}`}</div>}
@@ -382,9 +382,15 @@ function LineRow({
         >
           <div className="text-[16px] font-medium leading-tight">{line.product_name}</div>
           <div className="whitespace-nowrap text-right text-[15px] font-medium">
-            {line.supplier_name ? f.money(line.amount) : '—'}
+            {line.supplier_name ? f.money(line.order_amount ?? line.amount) : '—'}
           </div>
-          <div className="col-span-full text-[14px]">{f.qty(line.qty, unit)}</div>
+          <div className="col-span-full text-[14px]">
+            {f.qty(line.qty, unit)}
+            {/* Qadoqqa yaxlitlash: "40 kg → 2 qop" (buyurtmaga shunday ketadi) */}
+            {line.qty_packs && line.pack_unit && !(Number(line.pack_factor) === 1 && line.pack_unit === unit) && (
+              <span className="text-warn">{` → ${f.n(Number(line.qty_packs))} ${f.pack(line.pack_unit)}`}</span>
+            )}
+          </div>
           {line.supplier_name ? (
             <div className="col-span-full text-[13px] text-n7">
               {line.price_per_base !== null

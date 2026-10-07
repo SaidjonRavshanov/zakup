@@ -2,7 +2,7 @@ from decimal import Decimal
 from functools import lru_cache
 from typing import Literal
 
-from pydantic import BaseModel, Field, HttpUrl, PostgresDsn, SecretStr
+from pydantic import BaseModel, Field, HttpUrl, PostgresDsn, SecretStr, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 _DEV_JWT_SECRET = "local-dev-only-jwt-secret-change-me-0123456789"  # noqa: S105 — faqat local/test
@@ -87,6 +87,14 @@ class Settings(BaseSettings):
     deliveries_digest_hour: int | None = 7
 
     cors_origins: list[str] = ["http://localhost:5173", "http://127.0.0.1:5173"]
+
+    @field_validator("daily_sync_hour", "auto_requests_hour", "deliveries_digest_hour", mode="before")
+    @classmethod
+    def _hour_off(cls, value: object) -> object:
+        """.env'da kunlik ishni o'chirish: bo'sh qiymat, "off" yoki "null"."""
+        if isinstance(value, str) and value.strip().lower() in ("", "off", "null", "none"):
+            return None
+        return value
 
 
 @lru_cache

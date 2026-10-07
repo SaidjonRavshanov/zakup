@@ -3,10 +3,10 @@
 from collections import defaultdict
 from dataclasses import replace
 from datetime import date
-from decimal import Decimal
+from decimal import ROUND_HALF_UP, Decimal
 from uuid import UUID
 
-from zakup.modules.procurement.application.dto import OfferInfo, RequestDetail, RequestListItem
+from zakup.modules.procurement.application.dto import OfferInfo, RequestDetail, RequestLineView, RequestListItem
 from zakup.modules.procurement.application.ports import (
     CatalogPort,
     OrderReader,
@@ -19,6 +19,7 @@ from zakup.modules.procurement.domain.approval import ApprovalPolicy, SupplierDe
 from zakup.modules.procurement.domain.order import NewOrderLine, PurchaseOrder
 from zakup.modules.procurement.domain.request import (
     InvalidRequestError,
+    LineDecision,
     OfferChoice,
     PurchaseRequest,
     RequestStatus,
@@ -373,17 +374,22 @@ class GetRequest:
             stores={detail.store_id},
         )
         lines = tuple(
-            replace(
-                line,
-                product_name=labels.product(line.product_id)[0],
-                base_unit=labels.product(line.product_id)[1],
-                supplier_name=labels.suppliers.get(line.supplier_id) if line.supplier_id else None,
-            )
-            for line in detail.lines
+            [
+                replace(
+                    await self._packed(line),
+                    product_name=labels.product(line.product_id)[0],
+                    base_unit=labels.product(line.product_id)[1],
+                    supplier_name=labels.suppliers.get(line.supplier_id) if line.supplier_id else None,
+                )
+                for line in detail.lines
+            ]
         )
+        priced = [ln for ln in lines if ln.decision != LineDecision.REJECTED and ln.price_per_base is not None]
+        order_total = sum((ln.order_amount if ln.order_amount is not None else ln.amount for ln in priced), Decimal(0))
         return replace(
             detail,
             lines=lines,
+            order_total=order_total,
             store_name=labels.stores.get(detail.store_id),
             orders=tuple(
                 replace(
@@ -393,6 +399,22 @@ class GetRequest:
                 )
                 for order in orders
             ),
+        )
+
+    async def _packed(self, line: RequestLineView) -> RequestLineView:
+        """Qator → buyurtmadagi qadoqlar va summa (ApproveRequest._split bilan bir xil hisob)."""
+        if line.offer_id is None:
+            return line
+        offer = await self._catalog.offer(line.offer_id)
+        packs = await self._catalog.pack_quantity(line.offer_id, line.qty)
+        if offer is None or packs is None:
+            return line
+        return replace(
+            line,
+            pack_unit=offer.pack_unit,
+            pack_factor=offer.pack_factor,
+            qty_packs=packs,
+            order_amount=(packs * offer.price_per_pack).quantize(Decimal("0.01"), ROUND_HALF_UP),
         )
 
 

@@ -95,6 +95,10 @@ class RequestLineOut(Model):
     decision: LineDecision
     qty_suggested: Decimal | None = None
     calc: dict[str, str | None] | None = None
+    pack_unit: str | None = None
+    pack_factor: Decimal | None = None
+    qty_packs: Decimal | None = None
+    order_amount: Decimal | None = None
 
 
 class ApprovalOut(Model):
@@ -139,6 +143,7 @@ class RequestDetailOut(Model):
     lines: list[RequestLineOut]
     approvals: list[ApprovalOut]
     orders: list[OrderListOut]
+    order_total: Decimal | None = None
 
 
 # ---------------------------------------------------------------- buyurtma

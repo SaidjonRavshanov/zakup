@@ -39,6 +39,11 @@ export interface RequestLine {
   decision: LineDecision
   qty_suggested: DecimalString | null
   calc: AutoCalc | null
+  /** Buyurtmaga qanday ketadi (yetkazuvchi qadog'iga yaxlitlangan) — backend PO hisobi bilan bir xil. */
+  pack_unit?: string | null
+  pack_factor?: DecimalString | null
+  qty_packs?: DecimalString | null
+  order_amount?: DecimalString | null
 }
 
 /** Avto-zayavka: "nega shuncha" (backend `calc`, qiymatlar — matn ko'rinishidagi sonlar). */
@@ -92,6 +97,8 @@ export interface RequestDetail extends Omit<RequestListItem, 'lines_count'> {
   lines: RequestLine[]
   approvals: Approval[]
   orders: RequestOrder[]
+  /** Qadoqqa yaxlitlangan jami (rad etilgan qatorlarsiz). */
+  order_total?: DecimalString | null
 }
 
 export type RequestFilter = 'active' | 'pending' | 'done' | 'all'

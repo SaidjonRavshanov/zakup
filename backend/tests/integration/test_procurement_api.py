@@ -83,6 +83,12 @@ async def test_full_flow_request_to_supplier_response(client: AsyncClient, world
         ("Un", "Don Mahsulot", "300000.00"),
         ("Shakar", "Don Mahsulot", "160000.00"),
     ]
+    # Buyurtmaga qanday ketadi: qadoqqa yaxlitlangan — PO summasi bilan bir xil (pastda 900 000)
+    assert [(ln["pack_unit"], ln["qty_packs"], ln["order_amount"]) for ln in detail["lines"]] == [
+        ("bag", "2.0000", "500000.00"),
+        ("bag", "1.0000", "400000.00"),
+    ]
+    assert detail["order_total"] == "900000.00"
 
     # Oshpaz tasdiqlay olmaydi; zakupshik limiti (2 mln) yetadi
     assert (await client.post(f"{API}/requests/{request_id}/approve", json={}, headers=w.chef)).status_code == 403

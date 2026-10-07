@@ -82,6 +82,18 @@ export async function discardReceipt(id: string): Promise<void> {
   await refresh()
 }
 
+/**
+ * Server rad etgan qabulni qayta yuborish (masalan, buyurtma holati to'g'rilangandan keyin).
+ * Foto ham qayta yuklanadi — xato aynan fotoda bo'lishi mumkin. Qabul ID o'zgarmaydi: server takrorni tanib oladi.
+ */
+export async function retryReceipt(id: string): Promise<void> {
+  const item = await tx('readonly', (store) => store.get(id) as IDBRequest<PendingReceipt | undefined>)
+  if (!item) return
+  await tx('readwrite', (store) => store.put({ ...item, error: null, photoId: null }))
+  await refresh()
+  await flush()
+}
+
 let flushing: Promise<void> | null = null
 
 /** Navbatni yuborish (bir vaqtda bitta). Qabullar soni qaytarilmaydi — holat usePendingReceipts orqali. */
