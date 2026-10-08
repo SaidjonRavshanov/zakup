@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useNavigate, useParams } from '@tanstack/react-router'
-import { ChevronDown, ChevronUp, Plus, RefreshCw, TriangleAlert, X } from 'lucide-react'
+import { ChevronDown, ChevronUp, Pencil, Plus, RefreshCw, TriangleAlert, X } from 'lucide-react'
 import { useState } from 'react'
 import { productQuery } from '@/entities/catalog'
 import { ORDERS_KEY } from '@/entities/purchase-order'
@@ -38,6 +38,7 @@ import {
   toast,
   usePageActions,
 } from '@/shared/kit'
+import { FlowTrack, requestFlow } from '@/widgets/flow-track'
 import { AddProductSheet, type PickedProduct } from './AddProductSheet'
 import { L } from './i18n'
 import { packInfo, parseQty, qtyBody, qtyStep, typeLabel } from './labels'
@@ -226,6 +227,27 @@ function RequestView({ request }: { request: RequestDetail }) {
         </Banner>
       )}
 
+      <FlowTrack flow={requestFlow(z, request)} />
+
+      {request.orders.length > 0 && (
+        <>
+          <Section>{`${z.became_orders} · ${request.orders.length}`}</Section>
+          {request.orders.map((order) => {
+            const os = status(z, 'order', order.status)
+            return (
+              <LinkRow
+                key={order.id}
+                aside={<Tag tone={os.tone}>{os.label}</Tag>}
+                onClick={() => navigate({ to: '/orders/$orderId', params: { orderId: order.id } })}
+              >
+                <span className="font-medium">{order.number}</span>
+                {` · ${order.supplier_name ?? '—'}`}
+              </LinkRow>
+            )
+          })}
+        </>
+      )}
+
       <Cells
         className="mt-4"
         cols={2}
@@ -257,6 +279,7 @@ function RequestView({ request }: { request: RequestDetail }) {
       <Section aside={canDecide ? `${z.selected}: ${selected.length} · ${f.money(selTotal)}` : undefined}>
         {`${z.positions} · ${request.lines.length}`}
       </Section>
+      {canSup && <div className="mb-1 text-[14px] text-n7">{canEdit ? z.tap_to_edit : z.tap_to_supplier}</div>}
       {request.lines.map((line) => (
         <LineRow
           key={line.id}
@@ -273,25 +296,6 @@ function RequestView({ request }: { request: RequestDetail }) {
         <Btn size="lg" block className="mt-4" icon={<Plus size={20} />} onClick={() => setAdding(true)}>
           {z.add_item}
         </Btn>
-      )}
-
-      {request.orders.length > 0 && (
-        <>
-          <Section>{z.orders}</Section>
-          {request.orders.map((order) => {
-            const os = status(z, 'order', order.status)
-            return (
-              <LinkRow
-                key={order.id}
-                aside={<Tag tone={os.tone}>{os.label}</Tag>}
-                onClick={() => navigate({ to: '/orders/$orderId', params: { orderId: order.id } })}
-              >
-                <span className="font-medium">{order.number}</span>
-                {` · ${order.supplier_name ?? '—'}`}
-              </LinkRow>
-            )
-          })}
-        </>
       )}
 
       {request.approvals.length > 0 && (
@@ -414,8 +418,9 @@ function LineRow({
           style={{ cursor: onTap ? 'pointer' : 'default' }}
         >
           <div className="text-[16px] font-medium leading-tight">{line.product_name}</div>
-          <div className="whitespace-nowrap text-right text-[15px] font-medium">
+          <div className="flex items-center gap-1.5 whitespace-nowrap text-right text-[15px] font-medium">
             {line.supplier_name ? f.money(line.order_amount ?? line.amount) : '—'}
+            {onTap && <Pencil size={16} className="text-a7" aria-label={z.edit} />}
           </div>
           <div className="col-span-full text-[14px]">
             {f.qty(line.qty, unit)}
@@ -490,7 +495,8 @@ function LineSheet({
 
   return (
     <>
-      <div className="mb-2 mt-1 text-[13px] font-medium text-n7">{z.supplier}</div>
+      <div className="mt-1 text-[13px] font-medium text-n7">{z.sup_and_price}</div>
+      <div className="mb-2 mt-0.5 text-[13px] text-n7">{z.price_where}</div>
       {offers.length === 0 && <div className="py-2 text-[14px] text-n7">{t.requests.noOffers}</div>}
       <div className="flex flex-col gap-2">
         {offers.map((o) => {

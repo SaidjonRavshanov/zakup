@@ -37,6 +37,7 @@ import {
   type PageAction,
 } from '@/shared/kit'
 import { telegram } from '@/shared/lib/telegram'
+import { FlowTrack, orderFlow } from '@/widgets/flow-track'
 
 export default function OrderPage() {
   const { orderId } = useParams({ from: '/shell/orders/$orderId' })
@@ -151,12 +152,31 @@ function OrderView({ order }: { order: PurchaseOrderDetail }) {
   })
 
   const s = status(z, 'order', order.status)
+  const editHint =
+    order.status === 'CREATED'
+      ? z.po_edit_created
+      : order.status === 'SENT' && isManager
+        ? z.po_edit_sent
+        : order.status === 'CONFIRMED' || order.status === 'PARTIALLY_CONFIRMED'
+          ? z.po_edit_after
+          : null
   const hasConf = order.lines.some((l) => l.response !== null)
   const error = approve.error ?? send.error
 
   return (
     <div className="mx-auto max-w-[720px]">
       <PageHead kicker={order.storeName} title={order.number} aside={<Tag tone={s.tone} className="text-[13px]">{s.label}</Tag>} />
+      {order.requestId && (
+        <button
+          type="button"
+          className="mt-1 flex min-h-9 items-center gap-1 text-[14px] text-a7"
+          onClick={() => navigate({ to: '/requests/$requestId', params: { requestId: order.requestId! } })}
+        >
+          <ArrowLeft size={16} />
+          {z.from_request}
+        </button>
+      )}
+      <FlowTrack flow={orderFlow(z, order.status)} />
 
       {error && (
         <Banner tone="danger" onClose={() => {
@@ -210,6 +230,7 @@ function OrderView({ order }: { order: PurchaseOrderDetail }) {
       )}
 
       <Section>{z.positions_pack}</Section>
+      {editHint && <div className="mb-1 text-[14px] text-n7">{editHint}</div>}
       {order.lines.map((line) => (
         <OrderLineRow key={line.id} line={line} z={z} f={f} />
       ))}
@@ -241,15 +262,6 @@ function OrderView({ order }: { order: PurchaseOrderDetail }) {
       )}
 
       <div className="mt-5 flex flex-wrap gap-x-4 gap-y-2">
-        {order.requestId && (
-          <Btn
-            variant="ghost"
-            icon={<ArrowLeft size={20} />}
-            onClick={() => navigate({ to: '/requests/$requestId', params: { requestId: order.requestId! } })}
-          >
-            {z.request}
-          </Btn>
-        )}
         {sent && (
           <Btn variant="ghost" onClick={() => telegram.openLink(sent.response_url)}>
             {z.as_supplier}
