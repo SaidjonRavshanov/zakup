@@ -63,6 +63,13 @@ async def test_reports_on_real_flow(
     assert Decimal(rating["defect_rate"]) == (Decimal(2) / 18).quantize(Decimal(rating["defect_rate"]))
     # 100 − 40 (kam) − 30 x 0.11 (brak) − 20 (narx) − 0 (o'z vaqtida) = 37
     assert rating["score"] == "37"
+    # "Nega shu ball" — ekrandagi izoh
+    assert {k: Decimal(v) for k, v in rating["penalties"].items()} == {
+        "short": Decimal(40),
+        "defect": Decimal("3.3"),
+        "price": Decimal(20),
+        "late": Decimal(0),
+    }
 
     (price,) = (await client.get("/api/v1/analytics/prices", headers=admin_headers)).json()["items"]
     assert (Decimal(price["qty"]), Decimal(price["avg_price"])) == (Decimal(16), Decimal(11000))

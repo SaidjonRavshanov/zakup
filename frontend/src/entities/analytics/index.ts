@@ -39,6 +39,8 @@ export interface SupplierRating {
   on_time_rate: DecimalString
   response_hours: DecimalString | null
   score: DecimalString | null
+  /** Har bir ko'rsatkich qancha ball ayirgan: short / defect / price / late (qabul yo'q — null) */
+  penalties: Record<'short' | 'defect' | 'price' | 'late', DecimalString> | null
 }
 
 export interface ProductPrice {

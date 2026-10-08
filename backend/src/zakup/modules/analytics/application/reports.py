@@ -6,11 +6,11 @@ import qilmaydi — ARCHITECTURE §3, "analytics: read-model'lar"). Ruxsat va da
 
 from dataclasses import dataclass, replace
 from datetime import date, timedelta
-from decimal import Decimal
+from decimal import ROUND_HALF_UP, Decimal
 from typing import Protocol
 from uuid import UUID
 
-from zakup.modules.analytics.domain.rating import change_pct, supplier_score
+from zakup.modules.analytics.domain.rating import change_pct, score_penalties, supplier_score
 from zakup.shared_kernel.auth import Principal, Role
 from zakup.shared_kernel.clock import Clock, business_today, utc_now
 from zakup.shared_kernel.errors import DomainError
@@ -69,6 +69,7 @@ class SupplierRating:
     on_time_rate: Decimal
     response_hours: Decimal | None
     score: Decimal | None = None  # qabul yo'q — baholanmaydi
+    penalties: dict[str, Decimal] | None = None  # ko'rsatkich → ayirilgan ball (0.1 aniqlikda)
 
 
 @dataclass(frozen=True, slots=True)
@@ -176,20 +177,7 @@ class Reports:
         self, actor: Principal, *, period: Period, store_id: UUID | None = None
     ) -> list[SupplierRating]:
         rows = await self._reader.suppliers(stores=_scope(actor, VIEWERS, store_id), period=period)
-        rated = [
-            replace(
-                r,
-                score=supplier_score(
-                    short_rate=r.short_rate,
-                    defect_rate=r.defect_rate,
-                    price_rate=r.price_rate,
-                    on_time_rate=r.on_time_rate,
-                )
-                if r.receipts
-                else None,
-            )
-            for r in rows
-        ]
+        rated = [_rated(r) if r.receipts else r for r in rows]
         return sorted(rated, key=lambda r: (r.score is None, -(r.score or 0), -r.amount))
 
     async def prices(self, actor: Principal, *, period: Period, store_id: UUID | None = None) -> list[ProductPrice]:
@@ -211,3 +199,14 @@ class Reports:
     async def control(self, actor: Principal, *, period: Period, store_id: UUID | None = None) -> list[ControlItem]:
         items = await self._reader.control(stores=_scope(actor, CONTROLLERS, store_id), period=period)
         return sorted(items, key=lambda i: i.at, reverse=True)
+
+
+def _rated(row: SupplierRating) -> SupplierRating:
+    rates = {
+        "short_rate": row.short_rate,
+        "defect_rate": row.defect_rate,
+        "price_rate": row.price_rate,
+        "on_time_rate": row.on_time_rate,
+    }
+    penalties = {k: v.quantize(Decimal("0.1"), ROUND_HALF_UP) for k, v in score_penalties(**rates).items()}
+    return replace(row, score=supplier_score(**rates), penalties=penalties)

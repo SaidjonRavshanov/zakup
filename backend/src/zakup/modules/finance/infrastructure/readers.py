@@ -37,6 +37,7 @@ def _list_item(row: Any) -> PaymentListItem:
         total=row.total,
         requested_at=row.requested_at,
         paid_at=row.paid_at,
+        comment=row.comment,
     )
 
 
@@ -73,7 +74,9 @@ class SqlFinanceReader:
         limit: int,
         store_ids: set[UUID] | None = None,
     ) -> list[PaymentListItem]:
-        query = select(payment_requests).order_by(payment_requests.c.requested_at.desc(), payment_requests.c.id.desc())
+        # Faqat to'langanlar (to'lovlar tarixi) — to'langan vaqti bo'yicha, qolganlari — zayavka vaqti bo'yicha
+        by = payment_requests.c.paid_at if statuses == {PaymentStatus.PAID} else payment_requests.c.requested_at
+        query = select(payment_requests).order_by(by.desc().nulls_last(), payment_requests.c.id.desc())
         if store_ids is not None:
             query = query.where(_in_stores(payment_requests.c.id, store_ids))
         if statuses:

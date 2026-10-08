@@ -52,6 +52,7 @@ export interface PaymentListItem {
   total: DecimalString
   requested_at: string
   paid_at: string | null
+  comment: string | null
 }
 
 export interface PaymentDetail extends PaymentListItem {
@@ -112,6 +113,15 @@ export const paymentsQuery = (supplierId?: string) =>
     queryFn: ({ signal }) =>
       apiRequest<PaymentListItem[]>(`/finance/payments${supplierId ? `?supplier_id=${supplierId}` : ''}`, { signal }),
   })
+
+/** Backend qabulda joyida to'langan to'lovga yozadigan izoh (finance ON_DELIVERY_COMMENT). */
+export const ON_DELIVERY_COMMENT = 'Оплачено при приёмке'
+
+/** To'lovlar tarixi: faqat to'langanlar, to'langan vaqti bo'yicha (yangisi birinchi). */
+export const paidPaymentsQuery = queryOptions({
+  queryKey: [...FINANCE_KEY, 'payments', 'paid'],
+  queryFn: ({ signal }) => apiRequest<PaymentListItem[]>('/finance/payments?status=PAID&limit=200', { signal }),
+})
 
 export const paymentQuery = (id: string) =>
   queryOptions({

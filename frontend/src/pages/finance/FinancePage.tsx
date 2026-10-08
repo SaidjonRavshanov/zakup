@@ -6,8 +6,9 @@ import { balancesQuery, paymentsQuery, type PaymentStatus, type SupplierBalance 
 import { useI18n } from '@/shared/i18n'
 import { useZk } from '@/shared/i18n/use-zk'
 import { Cells, Empty, Row, RowsSkeleton, Seg, Tag, status } from '@/shared/kit'
+import { PaymentHistory } from './PaymentHistory'
 
-type Tab = 'debts' | 'pays'
+type Tab = 'debts' | 'pays' | 'history'
 type PayFilter = 'all' | PaymentStatus
 const PAY_FILTERS: ReadonlyArray<PaymentStatus> = ['SUBMITTED', 'APPROVED', 'PAID', 'REJECTED', 'CANCELLED']
 
@@ -54,12 +55,16 @@ export default function FinancePage() {
         options={[
           { value: 'debts', label: z.t_debts, count: isPending ? undefined : debts.length },
           { value: 'pays', label: z.t_pays, count: paymentsPending ? undefined : payments.length },
+          { value: 'history', label: z.t_history },
         ]}
         value={tab}
         onChange={setTab}
+        scroll
       />
 
-      {tab === 'debts' ? (
+      {tab === 'history' ? (
+        <PaymentHistory />
+      ) : tab === 'debts' ? (
         isPending ? (
           <RowsSkeleton n={4} />
         ) : debts.length === 0 ? (

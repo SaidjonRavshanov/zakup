@@ -64,6 +64,7 @@ class PaymentListItem:
     requested_at: datetime
     paid_at: datetime | None
     supplier_name: str | None = None
+    comment: str | None = None
 
 
 @dataclass(frozen=True, slots=True)

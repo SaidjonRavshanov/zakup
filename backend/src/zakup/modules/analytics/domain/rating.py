@@ -6,13 +6,25 @@ from decimal import ROUND_HALF_UP, Decimal
 WEIGHTS = {"short": Decimal(40), "defect": Decimal(30), "price": Decimal(20), "late": Decimal(10)}
 
 
+def score_penalties(
+    *, short_rate: Decimal, defect_rate: Decimal, price_rate: Decimal, on_time_rate: Decimal
+) -> dict[str, Decimal]:
+    """Har bir ko'rsatkich qancha ball ayirgani (ekranda "nega shu ball" uchun). Ulushlar 0..1."""
+    return {
+        "short": WEIGHTS["short"] * _clamp(short_rate),
+        "defect": WEIGHTS["defect"] * _clamp(defect_rate),
+        "price": WEIGHTS["price"] * _clamp(price_rate),
+        "late": WEIGHTS["late"] * (1 - _clamp(on_time_rate)),
+    }
+
+
 def supplier_score(*, short_rate: Decimal, defect_rate: Decimal, price_rate: Decimal, on_time_rate: Decimal) -> Decimal:
-    """Ulushlar 0..1. Hammasi ideal — 100; har bir ulush o'z og'irligiga qadar ayiradi."""
-    penalty = (
-        WEIGHTS["short"] * _clamp(short_rate)
-        + WEIGHTS["defect"] * _clamp(defect_rate)
-        + WEIGHTS["price"] * _clamp(price_rate)
-        + WEIGHTS["late"] * (1 - _clamp(on_time_rate))
+    """Hammasi ideal — 100; har bir ulush o'z og'irligiga qadar ayiradi."""
+    penalty = sum(
+        score_penalties(
+            short_rate=short_rate, defect_rate=defect_rate, price_rate=price_rate, on_time_rate=on_time_rate
+        ).values(),
+        Decimal(0),
     )
     return max(Decimal(100) - penalty, Decimal(0)).quantize(Decimal(1), ROUND_HALF_UP)
 

@@ -19,6 +19,7 @@ import { useI18n } from '@/shared/i18n'
 import { useZk, type Zk, type ZkKey } from '@/shared/i18n/use-zk'
 import { Cells, Empty, PageHead, RowsSkeleton, Seg, Skeleton, Tag } from '@/shared/kit'
 import { L } from './i18n'
+import { ScoreSheet } from './ScoreSheet'
 import { Sparkline } from './Sparkline'
 
 type Tab = 'suppliers' | 'prices' | 'stock' | 'control'
@@ -82,6 +83,7 @@ function Suppliers() {
   const { t } = useI18n()
   const { z, f, locale } = useZk()
   const { data, isPending } = useQuery(supplierRatingQuery)
+  const [explain, setExplain] = useState<SupplierRating | null>(null)
   if (isPending) return <Loading />
   if (!data?.items.length) return <Empty title={t.analytics.empty} hint={z.period30} />
 
@@ -90,6 +92,8 @@ function Suppliers() {
 
   return (
     <>
+      <div className="mt-3 text-[13px] text-n7">{L[locale].whyTap}</div>
+      <ScoreSheet supplier={explain} onClose={() => setExplain(null)} />
       {/* desktop: jadval */}
       <table className="zk-table mt-3 hidden min-[900px]:table">
         <thead>
@@ -109,7 +113,7 @@ function Suppliers() {
           {data.items.map((s) => {
             const sc = scoreView(s.score, z, L[locale].noScore)
             return (
-              <tr key={s.supplier_id}>
+              <tr key={s.supplier_id} className="cursor-pointer" onClick={() => setExplain(s)}>
                 <td className="font-medium" style={{ padding: '12px 6.8px' }}>
                   {s.supplier_name}
                 </td>
@@ -143,7 +147,12 @@ function Suppliers() {
             [z.m_ontime, rate(s.on_time_rate)],
           ]
           return (
-            <div key={s.supplier_id} className="grid grid-cols-[60px_minmax(0,1fr)] gap-3 border-b border-line py-3.5">
+            <button
+              key={s.supplier_id}
+              type="button"
+              onClick={() => setExplain(s)}
+              className="zk-hover grid w-full grid-cols-[60px_minmax(0,1fr)] gap-3 border-b border-line py-3.5 text-left text-ink"
+            >
               <div
                 className="flex h-[60px] flex-col items-center justify-center"
                 style={{ border: `1px solid ${sc.color}`, color: sc.color }}
@@ -172,7 +181,7 @@ function Suppliers() {
                   </div>
                 )}
               </div>
-            </div>
+            </button>
           )
         })}
       </div>

@@ -58,6 +58,7 @@ class SupplierRatingOut(Model):
     on_time_rate: Decimal
     response_hours: Decimal | None
     score: Decimal | None
+    penalties: dict[str, Decimal] | None  # short / defect / price / late → ayirilgan ball
 
 
 class ProductPriceOut(Model):

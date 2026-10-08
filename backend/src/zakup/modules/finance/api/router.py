@@ -108,6 +108,7 @@ class PaymentListOut(Model):
     total: Decimal
     requested_at: datetime
     paid_at: datetime | None
+    comment: str | None
 
 
 class PaymentLineOut(Model):
