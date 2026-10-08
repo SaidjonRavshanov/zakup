@@ -79,6 +79,9 @@ class SubmitReceiptIn(BaseModel):
     captured_at: datetime | None = Field(
         default=None, description="Oflayn: qabul telefonda qachon rasmiylashtirilgan (yuborilgan vaqt emas)"
     )
+    paid_on_delivery: bool = Field(
+        default=False, description="True — yetkazuvchiga joyida to'langan (payment_method majburiy); False — qarzga"
+    )
 
 
 class StatusOut(BaseModel):
@@ -153,6 +156,7 @@ class ReceiptDetailOut(Model):
     received_at: datetime
     supplier_invoice_no: str | None
     payment_method: PaymentMethod | None
+    paid_on_delivery: bool
     invoice_photo_id: UUID
     comment: str | None
     total: Decimal
@@ -208,6 +212,7 @@ async def submit_receipt(
         comment=body.comment,
         lines=tuple(FactLineData(**line.model_dump()) for line in body.lines),
         captured_at=body.captured_at,
+        paid_on_delivery=body.paid_on_delivery,
     )
     return StatusOut(status=await use_case(actor, command))
 

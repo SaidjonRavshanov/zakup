@@ -46,6 +46,7 @@ receipts = Table(
     Column("received_at", DateTime(timezone=True), nullable=False),
     Column("supplier_invoice_no", Text),
     Column("payment_method", Text),
+    Column("paid_on_delivery", Boolean, nullable=False, server_default="false"),
     Column("invoice_photo_id", UUID(as_uuid=True), ForeignKey("receiving.attachments.id"), nullable=False),
     Column("comment", Text),
     Column("total", Numeric(18, 2), nullable=False),

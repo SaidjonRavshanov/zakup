@@ -98,6 +98,7 @@ class SubmitReceipt:
                     payment_method=cmd.payment_method,
                     invoice_photo_id=cmd.invoice_photo_id,
                     comment=cmd.comment,
+                    paid_on_delivery=cmd.paid_on_delivery,
                 ),
                 expected=[
                     ExpectedLine(line.order_line_id, line.product_id, line.base_unit, line.qty, line.price)

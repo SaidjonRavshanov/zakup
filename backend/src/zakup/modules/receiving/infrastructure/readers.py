@@ -83,6 +83,7 @@ class SqlReceiptReader:
             payment_method=PaymentMethod(row.payment_method) if row.payment_method else None,
             invoice_photo_id=row.invoice_photo_id,
             comment=row.comment,
+            paid_on_delivery=row.paid_on_delivery,
             total=row.total,
             expected_total=row.expected_total,
             lines=tuple(

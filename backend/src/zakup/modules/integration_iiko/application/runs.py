@@ -198,12 +198,15 @@ class ScopeFactory(Protocol):
     def __call__(self) -> AbstractAsyncContextManager[SyncScope]: ...
 
 
-
 def _public_error(exc: Exception) -> str:
-    """Foydalanuvchiga ko'rinadigan xato: domen xatosi — kaliti; boshqasi (SQL, parametrlar) — faqat turi, tafsilot logda."""
+    """Foydalanuvchiga ko'rinadigan xato: domen xatosi — kaliti.
+
+    Boshqasi (SQL, parametrlar) — faqat turi, tafsilot logda.
+    """
     if isinstance(exc, DomainError):
         return f"{type(exc).__name__}: {exc}"[:500]
     return f"{type(exc).__name__} (tafsilot — worker logida)"
+
 
 class RunNextSync:
     """Worker qadami: navbatdan bitta ishni oladi va bajaradi. True — ish bor edi."""

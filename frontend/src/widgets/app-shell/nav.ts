@@ -45,12 +45,13 @@ export const NAV: Record<NavKey, { to: string; icon: LucideIcon; label: ZkKey }>
 
 export const MENU: Record<Role, NavKey[]> = {
   initiator: ['home', 'requests', 'catalog', 'profile'],
-  buyer: ['home', 'requests', 'orders', 'catalog', 'analytics', 'finance', 'receiving', 'profile'],
+  // Jarayon tartibida: zayavka → buyurtma → qabul; telefonda shular pastki menyuda, qolgani "Ещё"da
+  buyer: ['home', 'requests', 'orders', 'receiving', 'finance', 'catalog', 'analytics', 'profile'],
   approver: ['home', 'requests', 'orders', 'finance', 'analytics', 'profile'],
   storekeeper: ['home', 'receiving', 'profile'],
-  accountant: ['home', 'finance', 'orders', 'catalog', 'profile'],
-  auditor: ['home', 'orders', 'receiving', 'finance', 'analytics', 'requests', 'profile'],
-  admin: ['home', 'requests', 'finance', 'catalog', 'users', 'iiko', 'analytics', 'orders', 'receiving', 'profile'],
+  accountant: ['home', 'orders', 'finance', 'catalog', 'profile'],
+  auditor: ['home', 'requests', 'orders', 'receiving', 'finance', 'analytics', 'profile'],
+  admin: ['home', 'requests', 'orders', 'receiving', 'finance', 'catalog', 'users', 'iiko', 'analytics', 'profile'],
 }
 
 const ROOTS = new Set(Object.values(NAV).map((n) => n.to))

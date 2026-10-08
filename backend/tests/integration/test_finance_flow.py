@@ -209,3 +209,34 @@ async def test_overdue_supplier_order_needs_admin(
     )
     approved = await client.post(f"/api/v1/procurement/requests/{request_id}/approve", json={}, headers=admin_headers)
     assert approved.status_code == 200, approved.text
+
+
+async def test_paid_on_delivery_closes_obligation_at_once(
+    client: AsyncClient, admin_headers: dict[str, str], worker: Worker, engine: AsyncEngine
+) -> None:
+    """Qabulda "Оплачено на месте": majburiyat darhol to'langan, to'lov ro'yxatida — tasdiqsiz PAID, cheksiz."""
+    order_id, _ = await _confirmed_order(client, admin_headers, worker, engine)
+    line = (await client.get(f"/api/v1/receiving/orders/{order_id}/expected", headers=admin_headers)).json()["lines"][0]
+    body = {
+        "id": str(uuid7()),
+        "order_id": order_id,
+        "invoice_photo_id": await _photo(client, admin_headers),
+        "lines": [{"order_line_id": line["order_line_id"], "qty": "20", "price": "10500"}],
+        "paid_on_delivery": True,
+    }
+    # Usulsiz — xato (qaysi kassadan to'langani noma'lum)
+    missing = await client.post("/api/v1/receiving/receipts", json=body, headers=admin_headers)
+    assert missing.json()["code"] == "invalid_receipt"
+    created = await client.post(
+        "/api/v1/receiving/receipts", json={**body, "payment_method": "cash"}, headers=admin_headers
+    )
+    assert created.json()["status"] == "ACCEPTED", created.text
+    detail = (await client.get(f"/api/v1/receiving/receipts/{body['id']}", headers=admin_headers)).json()
+    assert (detail["paid_on_delivery"], detail["payment_method"]) == (True, "cash")
+    await worker.drain()
+
+    assert await _query(engine, "SELECT status, paid FROM finance.obligations") == [("PAID", Decimal("210000.00"))]
+    assert (await client.get("/api/v1/finance/suppliers", headers=admin_headers)).json() == []  # qarz yo'q
+    (payment,) = (await client.get("/api/v1/finance/payments", headers=admin_headers)).json()
+    assert (payment["status"], payment["method"], payment["total"]) == ("PAID", "cash", "210000.00")
+    assert payment["paid_at"] is not None

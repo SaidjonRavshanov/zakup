@@ -77,6 +77,7 @@ from zakup.modules.finance.application.use_cases import (
     SupplierCredit,
     UploadProof,
 )
+from zakup.modules.finance.domain.finance import PaymentMethod as FinancePaymentMethod
 from zakup.modules.finance.infrastructure.adapters import SuppliersAdapter
 from zakup.modules.finance.infrastructure.readers import SqlFinanceReader
 from zakup.modules.finance.infrastructure.repositories import SqlObligationRepository, SqlPaymentRepository
@@ -181,6 +182,7 @@ from zakup.modules.receiving.infrastructure.repositories import (
 from zakup.platform.access_tokens import AccessTokenCodec, InvalidAccessTokenError
 from zakup.platform.di import Stub
 from zakup.platform.health import router as health_router
+from zakup.platform.outbox import write_events
 from zakup.platform.scheduler import DailyJob, DailyScheduler
 from zakup.platform.uow import SqlAlchemyUnitOfWork
 from zakup.settings import Settings, get_settings
@@ -561,8 +563,12 @@ def outbox_handlers(settings: Settings | None = None) -> dict[str, Callable[[Asy
     settings = settings or get_settings()
 
     async def register_obligation(session: AsyncSession, payload: dict[str, Any], *, blocked: bool) -> None:
-        register = RegisterObligation(SqlObligationRepository(session), SuppliersAdapter(catalog_queries(session)))
-        await register(
+        register = RegisterObligation(
+            SqlObligationRepository(session), SuppliersAdapter(catalog_queries(session)), SqlPaymentRepository(session)
+        )
+        # Qabulda joyida to'langan bo'lsa — majburiyat darhol to'lov bilan yopiladi (eski event'larda maydon yo'q)
+        method = payload.get("payment_method") if payload.get("paid_on_delivery") else None
+        payments = await register(
             receipt_id=UUID(payload["aggregate_id"]),
             receipt_number=payload["number"],
             supplier_id=UUID(payload["supplier_id"]),
@@ -570,7 +576,11 @@ def outbox_handlers(settings: Settings | None = None) -> dict[str, Callable[[Asy
             amount=Decimal(payload["amount"]),
             received_at=datetime.fromisoformat(payload["received_at"]),
             blocked=blocked,
+            paid_on_delivery=FinancePaymentMethod(method) if method else None,
+            received_by=UUID(payload["received_by"]) if payload.get("received_by") else None,
         )
+        for payment in payments:
+            await write_events(session, payment.aggregate_type, payment.pull_events())
 
     async def receipt_accepted(session: AsyncSession, payload: dict[str, Any]) -> None:
         # Ikkala reaksiya ham idempotent: xato bo'lsa event to'liq qayta ishlanadi

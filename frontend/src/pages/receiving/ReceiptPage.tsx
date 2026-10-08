@@ -128,6 +128,7 @@ function ReceiptView({ receipt }: { receipt: ReceiptDetail }) {
             [z.supplier, receipt.supplier_name ?? '—'],
             [z.store, receipt.store_name ?? '—'],
             [z.inv_no, receipt.supplier_invoice_no ?? '—'],
+            [z.pay_when, receipt.paid_on_delivery ? z.pay_on_site : z.pay_debt],
             [z.pay_method, receipt.payment_method ? (receipt.payment_method === 'cash' ? z.pay_cash : z.pay_bank) : '—'],
             [
               'iiko',

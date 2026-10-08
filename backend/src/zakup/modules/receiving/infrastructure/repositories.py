@@ -43,6 +43,7 @@ def _header_row(receipt: Receipt) -> dict[str, Any]:
         "status": receipt.status.value,
         "supplier_invoice_no": h.supplier_invoice_no,
         "payment_method": h.payment_method.value if h.payment_method else None,
+        "paid_on_delivery": h.paid_on_delivery,
         "comment": h.comment,
         "total": receipt.total,
         "expected_total": receipt.expected_total,
@@ -164,6 +165,7 @@ class SqlReceiptRepository:
                 payment_method=PaymentMethod(row.payment_method) if row.payment_method else None,
                 invoice_photo_id=row.invoice_photo_id,
                 comment=row.comment,
+                paid_on_delivery=row.paid_on_delivery,
             ),
             status=ReceiptStatus(row.status),
             lines=[

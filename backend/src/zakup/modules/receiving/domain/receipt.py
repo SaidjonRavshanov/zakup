@@ -151,6 +151,9 @@ class ReceiptAccepted(DomainEvent):
     amount: str
     received_at: str
     had_dispute: bool
+    paid_on_delivery: bool = False  # yetkazuvchiga joyida to'langan → majburiyat darhol yopiladi
+    payment_method: str | None = None
+    received_by: str | None = None
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -165,6 +168,9 @@ class ReceiptDisputed(DomainEvent):
     amount: str
     received_at: str
     kinds: list[str]
+    paid_on_delivery: bool = False
+    payment_method: str | None = None
+    received_by: str | None = None
 
 
 @dataclass(kw_only=True)
@@ -178,6 +184,8 @@ class ReceiptHeader:
     payment_method: PaymentMethod | None
     invoice_photo_id: UUID
     comment: str | None = None
+    # False — qarzga (muddati yetkazuvchi shartlaridan); True — haydovchiga joyida to'langan
+    paid_on_delivery: bool = False
 
 
 class Receipt(AggregateRoot):
@@ -224,6 +232,8 @@ class Receipt(AggregateRoot):
             _line(line_id, item, by_line.get(item.order_line_id))
             for line_id, item in zip(line_ids, expected, strict=True)
         ]
+        if header.paid_on_delivery and header.payment_method is None:
+            raise InvalidReceiptError("receipt.payment_method_required")
         header.supplier_invoice_no = _clean(header.supplier_invoice_no)
         header.comment = _clean(header.comment)
         discrepancies = [d for line in lines for d in _discrepancies(line, tolerance)]
@@ -248,6 +258,9 @@ class Receipt(AggregateRoot):
                     amount=str(receipt.total),
                     received_at=header.received_at.isoformat(),
                     kinds=sorted({d.kind.value for d in blocking}),
+                    paid_on_delivery=header.paid_on_delivery,
+                    payment_method=header.payment_method.value if header.payment_method else None,
+                    received_by=str(header.received_by),
                 )
             )
         else:
@@ -291,6 +304,9 @@ class Receipt(AggregateRoot):
                 amount=str(self.total),
                 received_at=self.header.received_at.isoformat(),
                 had_dispute=self.dispute is not None,
+                paid_on_delivery=self.header.paid_on_delivery,
+                payment_method=self.header.payment_method.value if self.header.payment_method else None,
+                received_by=str(self.header.received_by),
             )
         )
 

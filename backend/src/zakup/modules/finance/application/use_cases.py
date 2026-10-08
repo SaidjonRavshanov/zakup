@@ -32,6 +32,7 @@ from zakup.modules.finance.domain.finance import (
     Obligation,
     ObligationStatus,
     PaymentLine,
+    PaymentMethod,
     PaymentRequest,
     PaymentStatus,
 )
@@ -71,9 +72,12 @@ class RegisterObligation:
     Tranzaksiyani outbox relay boshqaradi (handler bilan bitta savepoint).
     """
 
-    def __init__(self, obligations: ObligationRepository, suppliers: SuppliersPort) -> None:
+    def __init__(
+        self, obligations: ObligationRepository, suppliers: SuppliersPort, payments: PaymentRepository
+    ) -> None:
         self._obligations = obligations
         self._suppliers = suppliers
+        self._payments = payments
 
     async def __call__(
         self,
@@ -85,13 +89,21 @@ class RegisterObligation:
         amount: Decimal,
         received_at: datetime,
         blocked: bool,
-    ) -> None:
+        paid_on_delivery: PaymentMethod | None = None,
+        received_by: UUID | None = None,
+    ) -> list[PaymentRequest]:
+        """`paid_on_delivery` — joyida to'langan usul: majburiyat nizosiz bo'lsa darhol to'langan qilib yopiladi.
+
+        Qaytaradi: yaratilgan to'lov(lar) — event'lari outbox'ga (chaqiruvchi yozadi).
+        """
         existing = await self._obligations.by_receipt(receipt_id)
         if existing is not None:
             if not blocked and existing.blocked:
                 existing.accept(amount)
+                settled = await self._settle(existing, paid_on_delivery, received_by, received_at)
                 await self._obligations.save(existing)
-            return
+                return settled
+            return []
         terms = await self._suppliers.terms(supplier_id)
         obligation = Obligation.from_receipt(
             id=new_id(),
@@ -104,7 +116,27 @@ class RegisterObligation:
             deferral_days=terms.deferral_days if terms else 0,
             blocked=blocked,
         )
-        await self._obligations.add(obligation)
+        await self._obligations.add(obligation)  # avval majburiyat: to'lov qatori unga FK
+        settled = [] if blocked else await self._settle(obligation, paid_on_delivery, received_by, received_at)
+        if settled:
+            await self._obligations.save(obligation)
+        return settled
+
+    async def _settle(
+        self, obligation: Obligation, method: PaymentMethod | None, by: UUID | None, at: datetime
+    ) -> list[PaymentRequest]:
+        if method is None or by is None or obligation.outstanding <= 0:
+            return []
+        payment = PaymentRequest.paid_on_delivery(
+            id=new_id(),
+            number=await self._payments.next_number(),
+            obligation=obligation,
+            method=method,
+            paid_by=by,
+            at=at,
+        )
+        await self._payments.add(payment)
+        return [payment]
 
 
 # ---------------------------------------------------------------- saldo

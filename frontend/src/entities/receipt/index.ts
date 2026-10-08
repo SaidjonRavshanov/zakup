@@ -68,6 +68,8 @@ export interface Discrepancy {
 export interface ReceiptDetail extends ReceiptListItem {
   supplier_invoice_no: string | null
   payment_method: PaymentMethod | null
+  /** Qabulda yetkazuvchiga joyida to'langan (aks holda — qarzga) */
+  paid_on_delivery: boolean
   invoice_photo_id: string
   comment: string | null
   lines: ReceiptLine[]

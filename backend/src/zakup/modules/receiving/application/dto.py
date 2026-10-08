@@ -25,6 +25,7 @@ class SubmitReceiptCommand:
     comment: str | None
     lines: tuple[FactLineData, ...]
     captured_at: datetime | None = None  # oflayn qabul vaqti (telefonda); None — server vaqti
+    paid_on_delivery: bool = False
 
 
 @dataclass(frozen=True, slots=True)
@@ -101,5 +102,6 @@ class ReceiptDetail:
     export_status: str | None
     export_error: str | None
     iiko_document_number: str | None
+    paid_on_delivery: bool = False
     store_name: str | None = None
     supplier_name: str | None = None

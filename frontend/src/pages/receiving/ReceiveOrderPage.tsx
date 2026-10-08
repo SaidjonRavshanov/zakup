@@ -41,6 +41,7 @@ interface Draft {
   facts: Record<string, LineFact>
   invoiceNo: string
   method: PaymentMethod
+  onSite?: boolean
 }
 const draftKey = (orderId: string) => `zakup.receive.${orderId}`
 
@@ -95,6 +96,8 @@ function ReceiveForm({ orderId, number, lines }: { orderId: string; number: stri
   const [photoOpen, setPhotoOpen] = useState(false)
   const [invoiceNo, setInvoiceNo] = useState(restored?.invoiceNo ?? '')
   const [method, setMethod] = useState<PaymentMethod>(restored?.method ?? 'transfer')
+  // Qarzga (default) yoki haydovchiga joyida to'langan — to'langan bo'lsa majburiyat darhol yopiladi
+  const [onSite, setOnSite] = useState(restored?.onSite ?? false)
   const [saving, setSaving] = useState(false)
   const [saveError, setSaveError] = useState<string | null>(null)
   const finished = useRef(false)
@@ -102,9 +105,9 @@ function ReceiveForm({ orderId, number, lines }: { orderId: string; number: stri
   // Har o'zgarishda qoralama saqlanadi (yakunlangandan keyin — yo'q)
   useEffect(() => {
     if (finished.current) return
-    const empty = Object.keys(facts).length === 0 && !invoiceNo && method === 'transfer'
-    writeDraft(orderId, empty ? null : { facts, invoiceNo, method })
-  }, [orderId, facts, invoiceNo, method])
+    const empty = Object.keys(facts).length === 0 && !invoiceNo && method === 'transfer' && !onSite
+    writeDraft(orderId, empty ? null : { facts, invoiceNo, method, onSite })
+  }, [orderId, facts, invoiceNo, method, onSite])
   const fileRef = useRef<HTMLInputElement>(null)
 
   const factOf = (line: ExpectedLine): LineFact =>
@@ -162,6 +165,7 @@ function ReceiveForm({ orderId, number, lines }: { orderId: string; number: stri
           order_id: orderId,
           supplier_invoice_no: invoiceNo.trim() || null,
           payment_method: method,
+          paid_on_delivery: onSite,
           lines: lines.map((line) => {
             const n = numbers(line)
             return {
@@ -286,6 +290,16 @@ function ReceiveForm({ orderId, number, lines }: { orderId: string; number: stri
         <Field label={z.inv_no}>
           <Input maxLength={100} value={invoiceNo} placeholder="MB-2291" onChange={(e) => setInvoiceNo(e.target.value)} />
         </Field>
+        <Field label={z.pay_when}>
+          <Seg
+            options={[
+              { value: 'debt', label: z.pay_debt },
+              { value: 'site', label: z.pay_on_site },
+            ]}
+            value={onSite ? 'site' : 'debt'}
+            onChange={(v) => setOnSite(v === 'site')}
+          />
+        </Field>
         <Field label={z.pay_method}>
           <Seg
             options={[
@@ -297,6 +311,8 @@ function ReceiveForm({ orderId, number, lines }: { orderId: string; number: stri
           />
         </Field>
       </div>
+
+      <div className="mt-2 text-[13px] text-n7">{onSite ? z.pay_site_hint : z.pay_debt_hint}</div>
 
       {/* Nakladnoy fotosi majburiy (WORKFLOW B8) */}
       <div className="mb-2 mt-5 text-[13px] font-medium text-n7">{z.invoice_photo}</div>

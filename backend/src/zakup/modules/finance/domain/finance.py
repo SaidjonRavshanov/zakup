@@ -44,6 +44,7 @@ class PaymentStatus(StrEnum):
 
 
 ACTIVE_PAYMENT_STATUSES = frozenset({PaymentStatus.SUBMITTED, PaymentStatus.APPROVED})
+ON_DELIVERY_COMMENT = "Оплачено при приёмке"  # tizim yozadi; frontend shu bo'yicha belgilamaydi — faqat matn
 
 
 @dataclass(kw_only=True)
@@ -226,6 +227,36 @@ class PaymentRequest(AggregateRoot):
                 status=request.status.value,
             )
         )
+        return request
+
+    @classmethod
+    def paid_on_delivery(
+        cls,
+        *,
+        id: UUID,  # noqa: A002
+        number: str,
+        obligation: Obligation,
+        method: PaymentMethod,
+        paid_by: UUID,
+        at: datetime,
+    ) -> "PaymentRequest":
+        """Qabulda yetkazuvchiga joyida to'langan: tasdiqsiz, darhol PAID.
+
+        Buxgalter "Оплаты"da solishtirish uchun ko'radi, auditor — nazoratda (chek yo'q to'lov).
+        """
+        amount = obligation.outstanding
+        request = cls(
+            id=id,
+            number=number,
+            supplier_id=obligation.supplier_id,
+            method=method,
+            lines=[PaymentLine(obligation.id, amount)],
+            status=PaymentStatus.APPROVED,
+            requested_by=paid_by,
+            requested_at=at,
+            comment=ON_DELIVERY_COMMENT,
+        )
+        request.pay({obligation.id: obligation}, by=paid_by, at=at, proof_id=None)
         return request
 
     def __post_init__(self) -> None:

@@ -252,6 +252,10 @@ MESSAGES: Final[dict[str, dict[Locale, str]]] = {
         "uz": "Nakladnoy fotosisiz qabulni yakunlab bo'lmaydi",
         "ru": "Без фото накладной приёмку завершить нельзя",
     },
+    "receipt.payment_method_required": {
+        "uz": "Joyida to'langan bo'lsa — to'lov usulini tanlang (naqd yoki o'tkazma)",
+        "ru": "Если оплачено на месте — выберите способ оплаты (наличные или перечисление)",
+    },
     "receipt.unknown_line": {"uz": "Buyurtmada bunday pozitsiya yo'q", "ru": "В заказе нет такой позиции"},
     "receipt.negative": {
         "uz": "Miqdor va narx manfiy bo'lmasin",
