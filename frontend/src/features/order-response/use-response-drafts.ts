@@ -42,7 +42,16 @@ export function useResponseDrafts(lines: ReadonlyArray<ResponseLine>) {
     if (draft.kind === 'qty_changed') return { line_id: line.id, kind: draft.kind, qty_packs: value ?? '' }
     return { line_id: line.id, kind: draft.kind }
   })
-  return { draftOf, set, payload, valid }
+  // Javobga ko'ra jami: yangi narx / miqdor / "yo'q" darhol summada ko'rinsin (noto'g'ri kiritilgan — buyurtmadagi)
+  const known = lines.every((l) => l.qtyOrdered !== undefined && l.priceOrdered !== undefined)
+  const total = known
+    ? parsed.reduce((sum, { line, draft, value }) => {
+        const qty = draft.kind === 'qty_changed' && value ? Number(value) : (line.qtyOrdered ?? 0)
+        const price = draft.kind === 'price_changed' && value ? Number(value) : (line.priceOrdered ?? 0)
+        return sum + (draft.kind === 'out_of_stock' ? 0 : qty * price)
+      }, 0)
+    : null
+  return { draftOf, set, payload, valid, total }
 }
 
 export type ResponseDrafts = ReturnType<typeof useResponseDrafts>

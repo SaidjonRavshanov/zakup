@@ -340,11 +340,16 @@ export interface Cell {
 export function Cells({ items, cols, size = 24, className }: { items: Cell[]; cols?: number; size?: number; className?: string }) {
   return (
     <div
-      className={cn('grid gap-px border border-line bg-line', className)}
+      // Chiziqlar — har katakning o'ng/past soyasi: oxirgi to'lmagan qatordagi bo'sh joy kulrang bo'lib qolmaydi
+      className={cn('grid overflow-hidden border border-line bg-ground', className)}
       style={{ gridTemplateColumns: cols ? `repeat(${cols}, minmax(0, 1fr))` : 'repeat(auto-fill, minmax(150px, 1fr))' }}
     >
       {items.map((c, i) => (
-        <div key={i} className="flex min-h-[76px] flex-col justify-between gap-1 bg-ground p-3">
+        <div
+          key={i}
+          className="flex min-h-[76px] flex-col justify-between gap-1 bg-ground p-3"
+          style={{ boxShadow: '1px 0 0 var(--color-divider), 0 1px 0 var(--color-divider)' }}
+        >
           <div className="text-[13px] leading-tight text-n7">{c.label}</div>
           <div
             className="whitespace-nowrap font-head leading-none"

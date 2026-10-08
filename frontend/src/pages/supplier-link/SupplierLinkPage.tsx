@@ -123,7 +123,7 @@ function PublicOrderView({ token, data, onAnswered }: { token: string; data: Pub
       {form ? (
         <>
           <ResponseLines lines={lines} drafts={drafts} />
-          <TotalLine label={z.total} value={f.money(data.total)} />
+          <TotalLine label={z.total} value={f.money(drafts.total ?? data.total)} />
           {respond.error && <Banner tone="danger">{describeError(respond.error, t)}</Banner>}
         </>
       ) : (
