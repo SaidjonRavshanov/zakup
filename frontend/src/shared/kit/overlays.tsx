@@ -31,15 +31,20 @@ export function Sheet({ open, title, onClose, children }: SheetProps) {
   return createPortal(
     <div
       onClick={onClose}
-      className="fixed inset-0 z-40 flex flex-col items-center justify-end"
-      style={{ background: 'color-mix(in srgb, var(--color-neutral-900) 45%, transparent)', animation: 'zkFade .15s ease-out' }}
+      className="fixed inset-0 z-40 flex flex-col items-center justify-center px-4 py-6"
+      style={{
+        background: 'color-mix(in srgb, var(--color-neutral-900) 45%, transparent)',
+        animation: 'zkFade .15s ease-out',
+        paddingTop: 'max(24px, env(safe-area-inset-top))',
+        paddingBottom: 'max(24px, env(safe-area-inset-bottom))',
+      }}
     >
       <div
         role="dialog"
         aria-modal="true"
         onClick={(e) => e.stopPropagation()}
-        className="flex max-h-[84dvh] w-full max-w-[560px] flex-col border-t border-line bg-ground text-ink"
-        style={{ animation: 'zkUp .2s ease-out', paddingBottom: 'env(safe-area-inset-bottom)' }}
+        className="flex max-h-full w-full max-w-[560px] flex-col border border-line bg-ground text-ink"
+        style={{ animation: 'zkUp .2s ease-out' }}
       >
         <div className="flex shrink-0 items-center gap-3 pb-2 pl-4 pr-2 pt-3">
           <div className="flex-1 font-head text-[22px] leading-tight" style={{ fontWeight: 600 }}>
