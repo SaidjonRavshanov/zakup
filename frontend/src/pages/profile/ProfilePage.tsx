@@ -9,7 +9,7 @@ import { ThemeSwitch } from '@/features/theme-switch'
 import { forgetDevIdentity, signOut } from '@/shared/api/auth'
 import { useZk } from '@/shared/i18n/use-zk'
 import { Blueprint, Btn, Chips, KV, RowsSkeleton, Section, confirmAction, toast } from '@/shared/kit'
-import { isInTelegram } from '@/shared/lib/telegram'
+import { isInTelegram, isTelegramDesktop, telegram } from '@/shared/lib/telegram'
 import { clearOutbox, usePendingReceipts } from '@/shared/offline/outbox'
 import { L } from './i18n'
 
@@ -74,9 +74,14 @@ export default function ProfilePage() {
         className="mt-4"
         rows={[
           [z.stores_l, storeNames],
-          [z.opened_in, isInTelegram ? 'Telegram' : z.browser],
+          [z.opened_in, isInTelegram ? `Telegram · ${telegram.clientInfo()}` : z.browser],
         ]}
       />
+      {isTelegramDesktop && (
+        <Btn block className="mt-3" onClick={() => telegram.requestFullscreen()}>
+          {z.fullscreen_btn}
+        </Btn>
+      )}
 
       <Section className="mb-2 mt-5">{z.language}</Section>
       {/* Bot xabarlari va PDF ham shu tilda bo'lishi uchun backend'ga saqlanadi */}

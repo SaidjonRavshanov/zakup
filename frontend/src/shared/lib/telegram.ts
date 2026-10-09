@@ -36,7 +36,8 @@ interface TgWebApp {
   openTelegramLink?(url: string): void
   /** Tashqi havola — tizim brauzerida. */
   openLink?(url: string): void
-  onEvent(event: 'themeChanged', cb: () => void): void
+  onEvent(event: 'themeChanged' | 'fullscreenChanged', cb: () => void): void
+  onEvent(event: 'fullscreenFailed', cb: (e: { error?: string }) => void): void
   offEvent(event: 'themeChanged', cb: () => void): void
   BackButton: TgButton
   HapticFeedback: {
@@ -60,8 +61,36 @@ export const isInTelegram = Boolean(webApp?.initData)
 /** Kompyuterdagi Telegram (Windows/Linux — tdesktop, macOS) — keng ekran uchun to'liq ekran so'raladi. */
 export const isTelegramDesktop = isInTelegram && ['tdesktop', 'macos'].includes(webApp?.platform ?? '')
 
+/** To'liq ekran holati (Profil'da diagnostika: qaysi klient, versiya, nima uchun ochilmadi). */
+export const fullscreenState: { requested: boolean; active: boolean; error: string | null } = {
+  requested: false,
+  active: false,
+  error: null,
+}
+
+function requestFullscreen(): void {
+  if (!webApp || webApp.isFullscreen || fullscreenState.error === 'UNSUPPORTED') return
+  fullscreenState.requested = true
+  try {
+    webApp.requestFullscreen?.()
+  } catch (error) {
+    fullscreenState.error = error instanceof Error ? error.message : 'error'
+  }
+}
+
 export const telegram = {
   initData: (): string => webApp?.initData ?? '',
+
+  /** Diagnostika: "macos 8.0 · fullscreen: UNSUPPORTED". */
+  clientInfo: (): string | null =>
+    isInTelegram && webApp
+      ? `${webApp.platform} ${webApp.version} · fullscreen: ${
+          webApp.isFullscreen ? 'on' : (fullscreenState.error ?? (fullscreenState.requested ? 'off' : 'n/a'))
+        }`
+      : null,
+
+  /** Qo'lda to'liq ekran (Profil tugmasi). */
+  requestFullscreen,
 
   /** Faqat ko'rsatish uchun ("admin'ga ID yuboring"); ishonch uchun emas. */
   userId: (): number | null => (isInTelegram ? (webApp?.initDataUnsafe.user?.id ?? null) : null),
@@ -74,13 +103,22 @@ export const telegram = {
     if (!isInTelegram || !webApp) return
     webApp.ready()
     webApp.expand()
-    // Kompyuterda kichik oyna telefon ko'rinishini beradi — to'liq ekranda chap menyuli desktop ko'rinishi
+    // Kompyuterda kichik oyna telefon ko'rinishini beradi — to'liq ekranda chap menyuli desktop ko'rinishi.
+    // macOS klienti so'rovni ba'zan faqat foydalanuvchi bosgandan keyin bajaradi — birinchi bosishda qayta so'raymiz.
     if (isTelegramDesktop && webApp.isVersionAtLeast('8.0')) {
-      try {
-        webApp.requestFullscreen?.()
-      } catch {
-        /* eski klient — oddiy oynada qoladi */
+      const wa = webApp
+      wa.onEvent('fullscreenChanged', () => {
+        fullscreenState.active = Boolean(wa.isFullscreen)
+        if (fullscreenState.active) fullscreenState.error = null
+      })
+      wa.onEvent('fullscreenFailed', (e) => {
+        fullscreenState.error = e?.error ?? 'failed'
+      })
+      requestFullscreen()
+      const retry = () => {
+        if (!wa.isFullscreen) requestFullscreen()
       }
+      window.addEventListener('pointerdown', retry, { once: true, capture: true })
     }
     // Ro'yxatni pastga tortganda ilova yopilib qolmasin
     if (webApp.isVersionAtLeast('7.7')) webApp.disableVerticalSwipes?.()
