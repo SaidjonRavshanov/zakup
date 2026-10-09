@@ -70,6 +70,7 @@ function OrderView({ order }: { order: PurchaseOrderDetail }) {
   const [responding, setResponding] = useState(false)
   const [cancelling, setCancelling] = useState(false)
   const [reason, setReason] = useState('')
+  const [now] = useState(() => Date.now())
 
   const refresh = () =>
     Promise.all([
@@ -216,9 +217,15 @@ function OrderView({ order }: { order: PurchaseOrderDetail }) {
       </Blueprint>
 
       {order.status === 'SENT' && order.responseDeadline && (
-        <Banner tone="info" icon={<Clock size={20} />}>
-          {`${z.resp_until} ${f.dtTime(order.responseDeadline)}`}
-        </Banner>
+        Date.parse(order.responseDeadline) < now ? (
+          <Banner tone="warn" icon={<Clock size={20} />}>
+            {fill(z.resp_late, { t: f.dtTime(order.responseDeadline) })}
+          </Banner>
+        ) : (
+          <Banner tone="info" icon={<Clock size={20} />}>
+            {`${z.resp_until} ${f.dtTime(order.responseDeadline)}`}
+          </Banner>
+        )
       )}
       {order.warnings.includes('below_min_order') && (
         <Banner tone="warn">{`${z.min_order}: ${f.money(order.minOrderAmount)}`}</Banner>

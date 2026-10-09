@@ -3,6 +3,7 @@
  * Ma'lumot — mavjud ro'yxat so'rovlaridan (backend allaqachon ombor/rol bo'yicha cheklaydi).
  */
 import { useQuery } from '@tanstack/react-query'
+import { useState } from 'react'
 import { controlQuery, type ControlKind } from '@/entities/analytics'
 import { iikoSyncQuery, type SyncRun } from '@/entities/iiko'
 import { balancesQuery, paymentsQuery } from '@/entities/payment'
@@ -42,6 +43,7 @@ const SYNC_KIND: Record<SyncRun['kind'], ZkKey> = {
 
 export function useTodo(): { items: TodoItem[]; role: Role | null; loading: boolean } {
   const { z, f } = useZk()
+  const [now] = useState(() => Date.now())
   const { data: me } = useQuery(meQuery)
   const role = useActiveRole(me)
   const has = (...roles: Role[]) => role !== null && roles.includes(role)
@@ -122,10 +124,11 @@ export function useTodo(): { items: TodoItem[]; role: Role | null; loading: bool
   }
   if (has('buyer')) {
     for (const o of po.filter((x) => x.status === 'SENT' && x.responseDeadline)) {
+      const late = Date.parse(o.responseDeadline as string) < now
       add({
-        group: 'today',
-        label: z.k_waitresp,
-        tone: 'accent',
+        group: late ? 'now' : 'today',
+        label: late ? z.k_resp_late : z.k_waitresp,
+        tone: late ? 'warn' : 'accent',
         title: o.supplierName,
         meta: `${o.number} · ${z.resp_until} ${f.time(o.responseDeadline as string)}`,
         amount: f.money(o.totalAmount),
