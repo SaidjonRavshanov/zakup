@@ -58,8 +58,11 @@ const webApp: TgWebApp | undefined = window.Telegram?.WebApp
 /** Telegram ichida ochilganmi (brauzerda initData bo'sh bo'ladi). */
 export const isInTelegram = Boolean(webApp?.initData)
 
-/** Kompyuterdagi Telegram (Windows/Linux — tdesktop, macOS) — keng ekran uchun to'liq ekran so'raladi. */
-export const isTelegramDesktop = isInTelegram && ['tdesktop', 'macos'].includes(webApp?.platform ?? '')
+// Telefon klientlari; qolgani — kompyuter: tdesktop (Windows/Linux/Mac), macos (Telegram for macOS), weba/webk (web.telegram.org)
+const MOBILE_PLATFORMS = ['android', 'android_x', 'ios', 'unknown']
+
+/** Kompyuterdagi Telegram — keng ekran uchun to'liq ekran so'raladi. */
+export const isTelegramDesktop = isInTelegram && !MOBILE_PLATFORMS.includes(webApp?.platform ?? 'unknown')
 
 /** To'liq ekran holati (Profil'da diagnostika: qaysi klient, versiya, nima uchun ochilmadi). */
 export const fullscreenState: { requested: boolean; active: boolean; error: string | null } = {
@@ -105,7 +108,8 @@ export const telegram = {
     webApp.expand()
     // Kompyuterda kichik oyna telefon ko'rinishini beradi — to'liq ekranda chap menyuli desktop ko'rinishi.
     // macOS klienti so'rovni ba'zan faqat foydalanuvchi bosgandan keyin bajaradi — birinchi bosishda qayta so'raymiz.
-    if (isTelegramDesktop && webApp.isVersionAtLeast('8.0')) {
+    // Versiya tekshirilmaydi: ba'zi klientlar (macOS) eski versiya raqamini beradi, lekin to'liq ekranni qo'llaydi
+    if (isTelegramDesktop && typeof webApp.requestFullscreen === 'function') {
       const wa = webApp
       wa.onEvent('fullscreenChanged', () => {
         fullscreenState.active = Boolean(wa.isFullscreen)
