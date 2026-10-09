@@ -28,7 +28,6 @@ import {
   PageHead,
   RowsSkeleton,
   Section,
-  Seg,
   Sheet,
   Stepper,
   Tag,
@@ -40,6 +39,7 @@ import {
 } from '@/shared/kit'
 import { FlowTrack, requestFlow } from '@/widgets/flow-track'
 import { AddProductSheet, type PickedProduct } from './AddProductSheet'
+import { NeedByPicker } from './NeedByPicker'
 import { L } from './i18n'
 import { packInfo, parseQty, qtyBody, qtyStep, typeLabel } from './labels'
 
@@ -121,11 +121,6 @@ function RequestView({ request }: { request: RequestDetail }) {
     },
   })
   const neededPast = request.needed_by < todayIso()
-  const needOptions = [
-    { value: todayIso(), label: z.today_l },
-    { value: todayIso(1), label: z.tomorrow_l },
-    { value: todayIso(2), label: f.dt(todayIso(2)) },
-  ]
 
   const selected = request.lines.filter((l) => !deselected.has(l.id))
   const partial = selected.length < request.lines.length
@@ -260,8 +255,7 @@ function RequestView({ request }: { request: RequestDetail }) {
       {canEdit && (
         <>
           <div className="mb-2 mt-4 text-[13px] font-medium text-n7">{z.need_to}</div>
-          <Seg
-            options={needOptions}
+          <NeedByPicker
             value={request.needed_by}
             onChange={(date) => date !== request.needed_by && !revise.isPending && revise.mutate(date)}
           />
@@ -292,6 +286,7 @@ function RequestView({ request }: { request: RequestDetail }) {
           onTap={canSup ? () => setLineId(line.id) : undefined}
         />
       ))}
+      {(request.status === 'DRAFT' || request.status === 'PENDING_APPROVAL') && <SupplierSplit lines={request.lines} />}
       {canEdit && (
         <Btn size="lg" block className="mt-4" icon={<Plus size={20} />} onClick={() => setAdding(true)}>
           {z.add_item}
@@ -380,6 +375,37 @@ function RequestView({ request }: { request: RequestDetail }) {
 }
 
 const capitalize = (s: string) => s.charAt(0).toUpperCase() + s.slice(1)
+
+/** Tasdiqlansa qaysi yetkazuvchiga qancha buyurtma ketadi (pozitsiyalar soni + summa). */
+function SupplierSplit({ lines }: { lines: RequestLine[] }) {
+  const { z, f } = useZk()
+  const groups = new Map<string, { name: string; n: number; sum: number }>()
+  for (const line of lines) {
+    if (line.decision === 'rejected' || !line.supplier_id) continue
+    const g = groups.get(line.supplier_id) ?? { name: line.supplier_name ?? '—', n: 0, sum: 0 }
+    g.n += 1
+    g.sum += Number(line.order_amount ?? line.amount)
+    groups.set(line.supplier_id, g)
+  }
+  if (groups.size === 0) return null
+  return (
+    <>
+      <Section aside={String(groups.size)}>{z.by_suppliers}</Section>
+      <div className="mb-1 text-[14px] text-n7">{z.by_sup_hint}</div>
+      {[...groups.values()]
+        .sort((a, b) => b.sum - a.sum)
+        .map((g) => (
+          <div key={g.name} className="flex items-baseline justify-between gap-3 border-b border-line py-2.5 text-[15px]">
+            <span className="min-w-0">
+              <span className="font-medium">{g.name}</span>
+              <span className="text-n7">{` · ${g.n} ${z.pos_short}`}</span>
+            </span>
+            <span className="whitespace-nowrap font-medium">{f.money(g.sum)}</span>
+          </div>
+        ))}
+    </>
+  )
+}
 
 function LineRow({
   line,

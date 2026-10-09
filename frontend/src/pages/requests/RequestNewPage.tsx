@@ -9,13 +9,13 @@ import { describeError } from '@/shared/api/errors'
 import { useI18n } from '@/shared/i18n'
 import { todayIso, useZk } from '@/shared/i18n/use-zk'
 import { Banner, Btn, Field, PageHead, Picker, Section, Seg, Textarea, TotalLine, toast, usePageActions } from '@/shared/kit'
+import { NeedByPicker } from './NeedByPicker'
 import { AddProductSheet, type PickedProduct } from './AddProductSheet'
 import { L } from './i18n'
 import { packInfo, parseQty, qtyBody } from './labels'
 
 const CREATOR_ROLES = new Set(['initiator', 'buyer', 'admin'])
 
-type Need = '0' | '1' | '2'
 
 interface DraftLine extends PickedProduct {
   key: number
@@ -34,7 +34,7 @@ export default function RequestNewPage() {
   const allowed = grants.some((g) => g.store_id === null) ? stores : stores.filter((s) => grants.some((g) => g.store_id === s.id))
 
   const [storeId, setStoreId] = useState('')
-  const [need, setNeed] = useState<Need>('1')
+  const [neededBy, setNeededBy] = useState(() => todayIso(1))
   const [type, setType] = useState<RequestType>('manual')
   const [comment, setComment] = useState('')
   const [lines, setLines] = useState<DraftLine[]>([])
@@ -52,7 +52,7 @@ export default function RequestNewPage() {
     mutationFn: async (submit: boolean) => {
       const { id } = await requestsApi.create({
         store_id: store,
-        needed_by: todayIso(Number(need)), // Toshkent sanasi (qurilma soat mintaqasi emas)
+        needed_by: neededBy, // Toshkent sanasi (qurilma soat mintaqasi emas)
         type,
         comment: comment.trim() || null,
       })
@@ -89,12 +89,6 @@ export default function RequestNewPage() {
     },
   })
 
-  const needOptions: Array<{ value: Need; label: string }> = [
-    { value: '0', label: z.today_l },
-    { value: '1', label: z.tomorrow_l },
-    { value: '2', label: f.dt(todayIso(2)) },
-  ]
-
   return (
     <div className="mx-auto max-w-[720px]">
       <PageHead title={z.new_req} sub={z.new_req_sub} />
@@ -107,10 +101,10 @@ export default function RequestNewPage() {
         onChange={setStoreId}
       />
 
-      <div className="mt-4 grid gap-4" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))' }}>
+      <div className="mt-4 grid gap-4">
         <div>
           <div className="mb-2 text-[13px] font-medium text-n7">{z.need_to}</div>
-          <Seg options={needOptions} value={need} onChange={setNeed} />
+          <NeedByPicker value={neededBy} onChange={setNeededBy} />
         </div>
         <div>
           <div className="mb-2 text-[13px] font-medium text-n7">{z.type}</div>

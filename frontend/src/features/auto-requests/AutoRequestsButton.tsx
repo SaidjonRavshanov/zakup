@@ -1,4 +1,5 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query'
+import { useNavigate } from '@tanstack/react-router'
 import { RefreshCw, X } from 'lucide-react'
 import { REQUESTS_KEY, requestsApi, type AutoSkipReason } from '@/entities/purchase-request'
 import { describeError } from '@/shared/api/errors'
@@ -19,6 +20,7 @@ export function AutoRequestsButton() {
   const { z } = useZk()
   const { t } = useI18n()
   const queryClient = useQueryClient()
+  const navigate = useNavigate()
   const run = useMutation({
     mutationFn: () => requestsApi.runAuto(),
     onSuccess: async () => {
@@ -46,6 +48,18 @@ export function AutoRequestsButton() {
               <X size={20} />
             </button>
           </div>
+          {result.request_ids.length === 0 && <div className="mt-1 text-[14px] text-n7">{z.auto_none}</div>}
+          {result.request_ids.map((id, i) => (
+            <Btn
+              key={id}
+              variant="primary"
+              block
+              className="mt-2.5"
+              onClick={() => navigate({ to: '/requests/$requestId', params: { requestId: id } })}
+            >
+              {result.request_ids.length > 1 ? `${z.open_auto} ${i + 1}` : z.open_auto}
+            </Btn>
+          ))}
           {skipped.length > 0 && (
             <>
               <div className="mb-1 mt-1.5 text-[13px] text-n7">{z.skipped}</div>
