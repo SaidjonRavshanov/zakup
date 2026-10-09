@@ -8,6 +8,7 @@ from fastapi import APIRouter, Depends, Query, status
 from zakup.modules.identity.api.schemas import (
     ChangeLocaleIn,
     DevSignInIn,
+    HandoffOut,
     RefreshIn,
     SessionOut,
     SetRolesIn,
@@ -20,6 +21,7 @@ from zakup.modules.identity.application.use_cases import (
     ChangeMyLocale,
     DeactivateUser,
     GetMyProfile,
+    IssueBrowserHandoff,
     ListUsers,
     RefreshSession,
     SetUserRoles,
@@ -49,6 +51,13 @@ async def refresh_session(
     body: RefreshIn, use_case: Annotated[RefreshSession, Depends(Stub(RefreshSession))]
 ) -> SessionOut:
     return SessionOut.model_validate(await use_case(body.refresh_token))
+
+
+@auth_router.post("/handoff")
+async def browser_handoff(
+    actor: CurrentPrincipal, use_case: Annotated[IssueBrowserHandoff, Depends(Stub(IssueBrowserHandoff))]
+) -> HandoffOut:
+    return HandoffOut(code=await use_case(actor))
 
 
 @auth_router.post("/logout", status_code=status.HTTP_204_NO_CONTENT)

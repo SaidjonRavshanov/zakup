@@ -23,6 +23,10 @@ class RefreshIn(BaseModel):
     refresh_token: str = Field(min_length=1, max_length=200)
 
 
+class HandoffOut(BaseModel):
+    code: str
+
+
 class SessionOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 

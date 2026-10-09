@@ -95,6 +95,8 @@ export const telegram = {
   /** Qo'lda to'liq ekran (Profil tugmasi). */
   requestFullscreen,
 
+  isFullscreen: (): boolean => Boolean(webApp?.isFullscreen),
+
   /** Faqat ko'rsatish uchun ("admin'ga ID yuboring"); ishonch uchun emas. */
   userId: (): number | null => (isInTelegram ? (webApp?.initDataUnsafe.user?.id ?? null) : null),
 

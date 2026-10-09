@@ -6,7 +6,9 @@ import { storesQuery } from '@/entities/catalog'
 import { changeMyLocale, clearActiveRole, meQuery, setActiveRole, useActiveRole, useHasRole, userRoles } from '@/entities/user'
 import { LanguageSwitch } from '@/features/language-switch'
 import { ThemeSwitch } from '@/features/theme-switch'
-import { forgetDevIdentity, signOut } from '@/shared/api/auth'
+import { browserHandoffUrl, forgetDevIdentity, signOut } from '@/shared/api/auth'
+import { describeError } from '@/shared/api/errors'
+import { useI18n } from '@/shared/i18n'
 import { useZk } from '@/shared/i18n/use-zk'
 import { Blueprint, Btn, Chips, KV, RowsSkeleton, Section, confirmAction, toast } from '@/shared/kit'
 import { isInTelegram, isTelegramDesktop, telegram } from '@/shared/lib/telegram'
@@ -16,6 +18,7 @@ import { L } from './i18n'
 export default function ProfilePage() {
   const navigate = useNavigate()
   const { z, locale } = useZk()
+  const { t } = useI18n()
   const queryClient = useQueryClient()
   const { data: me } = useQuery(meQuery)
   const { data: stores } = useQuery(storesQuery)
@@ -78,9 +81,32 @@ export default function ProfilePage() {
         ]}
       />
       {isTelegramDesktop && (
-        <Btn block className="mt-3" onClick={() => telegram.requestFullscreen()}>
-          {z.fullscreen_btn}
-        </Btn>
+        <div className="mt-3 grid gap-2.5">
+          <Btn
+            block
+            onClick={() => {
+              telegram.requestFullscreen()
+              // Telegram for macOS to'liq ekranni qo'llamaydi — jim qolmasin, brauzer yo'lini taklif qilamiz
+              window.setTimeout(() => {
+                if (!telegram.isFullscreen()) toast(z.fullscreen_no, { error: true })
+              }, 900)
+            }}
+          >
+            {z.fullscreen_btn}
+          </Btn>
+          <Btn
+            variant="primary"
+            block
+            onClick={() =>
+              void browserHandoffUrl()
+                .then((url) => telegram.openLink(url))
+                .catch((error: unknown) => toast(describeError(error, t), { error: true }))
+            }
+          >
+            {z.open_browser}
+          </Btn>
+          <div className="text-[13px] text-n7">{z.open_browser_hint}</div>
+        </div>
       )}
 
       <Section className="mb-2 mt-5">{z.language}</Section>

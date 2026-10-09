@@ -37,6 +37,16 @@ export const session = {
     }
   },
 
+  /** Telegram → brauzer: bir martalik kod refresh o'rnida (birinchi so'rovda oddiy sessiyaga almashadi). */
+  adoptRefresh(code: string): void {
+    accessToken = null
+    try {
+      localStorage.setItem(REFRESH_KEY, code)
+    } catch {
+      /* private rejim: kod ishlatilmaydi — "Telegram orqali oching" ekrani */
+    }
+  },
+
   clear(): void {
     accessToken = null
     try {

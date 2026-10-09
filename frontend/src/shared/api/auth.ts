@@ -64,6 +64,20 @@ export async function ensureSession(): Promise<boolean> {
   return true
 }
 
+/** Ilova Telegram ichidan brauzerda ochilgan bo'lsa (#handoff=kod) — kodni sessiyaga olib, manzildan o'chiramiz. */
+export function adoptBrowserHandoff(): void {
+  const match = /^#handoff=([\w-]+)$/.exec(window.location.hash)
+  if (!match?.[1]) return
+  session.adoptRefresh(match[1])
+  window.history.replaceState(null, '', window.location.pathname + window.location.search)
+}
+
+/** Telegram ichida: shu foydalanuvchi bilan tizim brauzerida ochiladigan havola (2 daqiqa, bir martalik). */
+export async function browserHandoffUrl(): Promise<string> {
+  const { code } = await apiRequest<{ code: string }>('/auth/handoff', { method: 'POST' })
+  return `${window.location.origin}/#handoff=${code}`
+}
+
 export async function signOut(): Promise<void> {
   const refresh = session.refreshToken()
   session.clear()

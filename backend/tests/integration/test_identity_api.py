@@ -7,7 +7,7 @@ from urllib.parse import urlencode
 import pytest
 from httpx import AsyncClient
 
-from tests.integration.conftest import BOT_TOKEN, bearer, sign_in
+from tests.integration.conftest import ADMIN_TELEGRAM_ID, BOT_TOKEN, bearer, sign_in
 
 pytestmark = pytest.mark.integration
 
@@ -140,3 +140,16 @@ async def test_role_for_unknown_store_is_rejected(client: AsyncClient, admin_hea
     grants = [{"role": "storekeeper", "store_id": "0192a000-0000-7000-8000-000000000001"}]
     response = await client.put(f"{USERS}/{user_id}/roles", json={"grants": grants}, headers=admin_headers)
     assert (response.status_code, response.json()["code"]) == (422, "invalid_user")
+
+
+async def test_browser_handoff_code_is_single_use(client: AsyncClient, admin_headers: dict[str, str]) -> None:
+    """Telegram (macOS) → tizim brauzeri: bir martalik kod oddiy sessiyaga almashadi, ikkinchi marta — yo'q."""
+    assert (await client.post("/api/v1/auth/handoff")).status_code == 401
+    code = (await client.post("/api/v1/auth/handoff", headers=admin_headers)).json()["code"]
+
+    browser = await client.post("/api/v1/auth/refresh", json={"refresh_token": code})
+    assert browser.status_code == 200, browser.text
+    me = await client.get("/api/v1/me", headers=bearer(browser.json()))
+    assert me.json()["telegram_id"] == ADMIN_TELEGRAM_ID
+
+    assert (await client.post("/api/v1/auth/refresh", json={"refresh_token": code})).status_code == 401

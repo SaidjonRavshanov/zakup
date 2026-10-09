@@ -87,6 +87,7 @@ from zakup.modules.identity.application.use_cases import (
     ChangeMyLocale,
     DeactivateUser,
     GetMyProfile,
+    IssueBrowserHandoff,
     ListUsers,
     RefreshSession,
     SetUserRoles,
@@ -204,6 +205,8 @@ ROUTERS: tuple[APIRouter, ...] = (
 )
 
 T = TypeVar("T")
+# Telegram → brauzer o'tish kodi: bir martalik, 2 daqiqa
+HANDOFF_TTL_S = 120
 Overrides = dict[Callable[..., Any], Callable[..., Any]]
 
 
@@ -288,6 +291,11 @@ def _wire_identity(
     overrides[Stub(RefreshSession)] = per_request(
         lambda session: RefreshSession(
             SqlAlchemyUnitOfWork(session), SqlUserRepository(session), access, refresh_store(session)
+        )
+    )
+    overrides[Stub(IssueBrowserHandoff)] = per_request(
+        lambda session: IssueBrowserHandoff(
+            SqlAlchemyUnitOfWork(session), SqlUserRepository(session), SqlRefreshTokenStore(session, HANDOFF_TTL_S)
         )
     )
     overrides[Stub(SignOut)] = per_request(

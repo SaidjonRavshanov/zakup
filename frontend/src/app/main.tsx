@@ -1,6 +1,7 @@
 import { QueryClientProvider } from '@tanstack/react-query'
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
+import { adoptBrowserHandoff } from '@/shared/api/auth'
 import { queryClient } from '@/shared/api/query-client'
 import { initI18n } from '@/shared/i18n'
 import { telegram } from '@/shared/lib/telegram'
@@ -10,6 +11,7 @@ import { startOutbox } from '@/shared/offline/outbox'
 import { Root } from './Root'
 import './styles/index.css'
 
+adoptBrowserHandoff()
 telegram.init()
 detectPerformanceMode()
 initTheme()

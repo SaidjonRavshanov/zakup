@@ -108,6 +108,28 @@ class RefreshSession:
             return tokens
 
 
+class IssueBrowserHandoff:
+    """Telegram ichidan brauzerga o'tish: qisqa muddatli (refresh store TTL — 2 daq) bir martalik kod.
+
+    Brauzer uni /auth/refresh ga beradi va oddiy sessiya oladi (rotatsiya). Telegram for macOS to'liq ekranni
+    qo'llamaydi — kompyuterda keng ko'rinish uchun ilovani tizim brauzerida ochish yo'li.
+    """
+
+    def __init__(self, uow: UnitOfWork, users: UserRepository, refresh: RefreshTokenStore) -> None:
+        self._uow = uow
+        self._users = users
+        self._refresh = refresh
+
+    async def __call__(self, actor: Principal) -> str:
+        async with self._uow:
+            user = await self._users.get(actor.user_id)
+            if user is None or not user.is_active:
+                raise AccountPendingError("auth.account_pending")
+            code = await self._refresh.issue(user.id)
+            await self._uow.commit()
+            return code
+
+
 class SignOut:
     def __init__(self, uow: UnitOfWork, refresh: RefreshTokenStore) -> None:
         self._uow = uow
